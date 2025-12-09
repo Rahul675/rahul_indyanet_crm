@@ -17,8 +17,6 @@ export class IssuesService {
     data: CreateIssueDto,
     user: { id: string; name: string; role: string }
   ) {
-    if (!user?.id) throw new Error("User not found in request");
-
     const customer = await this.prisma.customer.findUnique({
       where: { id: data.customerId },
     });
@@ -34,7 +32,7 @@ export class IssuesService {
       include: { customer: true },
     });
 
-    // Log Issue Creation
+    // 🔹 Issue log using same audit table
     await this.audit.logAction(
       user.id,
       "ISSUE_CREATE",
@@ -42,6 +40,7 @@ export class IssuesService {
       `Issue created for ${customer.fullName} (ID: ${customer.id}) by ${user.name} (${user.role})`
     );
 
+    // 🔹 Notification
     await this.notifications.createNotification(
       "New Issue Created",
       `A new issue was raised for customer ${customer.fullName}`,
@@ -81,8 +80,6 @@ export class IssuesService {
     data: UpdateIssueDto,
     user: { id: string; name: string; role: string }
   ) {
-    if (!user?.id) throw new Error("User not found in request");
-
     const existing = await this.prisma.issue.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException(`Issue ${id} not found`);
 
@@ -103,8 +100,6 @@ export class IssuesService {
   }
 
   async remove(id: string, user: { id: string; name: string; role: string }) {
-    if (!user?.id) throw new Error("User not found in request");
-
     const existing = await this.prisma.issue.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException(`Issue ${id} not found`);
 

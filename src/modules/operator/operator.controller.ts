@@ -72,6 +72,59 @@
 //   // }
 // }
 
+// import {
+//   Controller,
+//   Get,
+//   Post,
+//   Body,
+//   Patch,
+//   Param,
+//   Delete,
+//   Req,
+//   UseGuards,
+// } from "@nestjs/common";
+// import { OperatorService } from "./operator.service";
+// import { CreateOperatorDto } from "./dto/create-operator.dto";
+// import { UpdateOperatorDto } from "./dto/update-operator.dto";
+// import { JwtAuthGuard } from "../auth/jwt-auth.guard";
+
+// @Controller("operators")
+// @UseGuards(JwtAuthGuard)
+// export class OperatorController {
+//   constructor(private readonly operatorService: OperatorService) {}
+
+//   @Post()
+//   create(@Body() dto: CreateOperatorDto, @Req() req: any) {
+//     return this.operatorService.create(dto, req.user);
+//   }
+
+//   @Get()
+//   findAll(@Req() req: any) {
+//     return this.operatorService.findAll(req.user);
+//   }
+
+//   @Get(":id")
+//   findOne(@Param("id") id: string, @Req() req: any) {
+//     return this.operatorService.findOne(id, req.user);
+//   }
+
+//   @Patch(":id")
+//   update(
+//     @Param("id") id: string,
+//     @Body() dto: UpdateOperatorDto,
+//     @Req() req: any
+//   ) {
+//     return this.operatorService.update(id, dto, req.user);
+//   }
+
+//   @Delete(":id")
+//   remove(@Param("id") id: string, @Req() req: any) {
+//     return this.operatorService.remove(id, req.user);
+//   }
+// }
+
+import { Roles } from "../auth/roles.decorator";
+import { RolesGuard } from "../auth/roles.guard";
 import {
   Controller,
   Get,
@@ -89,7 +142,8 @@ import { UpdateOperatorDto } from "./dto/update-operator.dto";
 import { JwtAuthGuard } from "../auth/jwt-auth.guard";
 
 @Controller("operators")
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles("admin")
 export class OperatorController {
   constructor(private readonly operatorService: OperatorService) {}
 

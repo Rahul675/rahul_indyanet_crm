@@ -60,9 +60,9 @@ export class LoadShareService {
   // ✅ Find all / search
   async findAll(
     search?: string,
-    skip = 0,
-    take = 100,
-    sortBy = "createdAt",
+    skip: number = 0,
+    take?: number, // FIXED: cannot set default as `number`
+    sortBy: string = "createdAt",
     sortOrder: Prisma.SortOrder = "desc"
   ) {
     const where: Prisma.LoadShareWhereInput | undefined = search
@@ -74,11 +74,12 @@ export class LoadShareService {
           ],
         }
       : undefined;
+
     return this.prisma.loadShare.findMany({
       where,
       orderBy: { [sortBy]: sortOrder },
       skip,
-      take,
+      take: take ?? undefined, // ⭐ FIX: if take is undefined → return ALL
     });
   }
 

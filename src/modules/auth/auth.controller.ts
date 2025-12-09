@@ -34,7 +34,6 @@ export class AuthController {
     return this.auth.logout(userId, body.reason);
   }
 
-  @UseGuards(JwtAuthGuard)
   @Get("users")
   @UseGuards(AuthGuard("jwt"))
   async getUsers() {
