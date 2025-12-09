@@ -172,6 +172,7 @@
 //   //   });
 //   // }
 // }
+
 import {
   Injectable,
   NotFoundException,
@@ -182,11 +183,18 @@ import { PrismaService } from "../../prisma/prisma.service";
 import { CreateOperatorDto } from "./dto/create-operator.dto";
 import { UpdateOperatorDto } from "./dto/update-operator.dto";
 import { MailerService } from "../../mailers/mailer.services";
+import { AuditService } from "../audit/audit.service";
+import { NotificationService } from "../notifications/notification.service";
 import * as bcrypt from "bcrypt";
 
 @Injectable()
 export class OperatorService {
-  constructor(private prisma: PrismaService, private mailer: MailerService) {}
+  constructor(
+    private prisma: PrismaService,
+    private audit: AuditService,
+    private notifications: NotificationService,
+    private mailer: MailerService
+  ) {}
 
   // 🟢 Create Operator (Admin Only)
   async create(dto: CreateOperatorDto, currentUser: any) {
@@ -218,6 +226,21 @@ export class OperatorService {
         role: "operator",
       },
     });
+
+    // 🟢 Audit Log
+    await this.audit.logAction(
+      currentUser.id,
+      "CREATE_OPERATOR",
+      "User",
+      `Admin ${currentUser.name} created operator account: ${operator.name}`
+    );
+
+    // 🟢 Notification
+    await this.notifications.createNotification(
+      "New Operator Account Created",
+      `${operator.name} has been added as a new operator.`,
+      operator.id
+    );
 
     // Send Email
     await this.mailer.send(
