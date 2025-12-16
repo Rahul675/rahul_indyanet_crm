@@ -154,27 +154,28 @@ model LoadShare {
 //////////////////////////////////////////////////////
 
 model OtherClient {
-  id                   String    @id @default(cuid())
-  site                 String
-  lanIp                String?
-  remarks              String?
-  macId                String?
-  landlineWifiId       String?
-  speedMbps            Int?
-  internet             String?
-  installation         String?
-  previousInternetBill Float?
-  received             String?
-  dispatch             String?
-  date                 DateTime?
-  reachedDay           String?
-  installationDate     DateTime?
-  aSpoke               String?
-  contactNo            String?
-  dvrConnected         String?
-  simNo                String?
-  deviceName           String?
-  deviceLicense        String?
+  id                    String   @id @default(cuid())
+  site                  String
+  publicIp1             String?  // New
+  publicIp2             String?  // New
+  isp1                  String?  // New
+  isp2                  String?  // New
+  lanIp                 String?
+  remarks               String?
+  macId                 String?
+  landlineWifiId        String?
+  speedMbps             String?  // Changed from Int to String
+  internetInstallation  String?  // Combined field
+  prevBillReceived      String?  // Changed from Float to String
+  dispatchDate          DateTime? // Changed to DateTime
+  reachedDayDate        DateTime? // Changed to DateTime
+  installationDate      DateTime?
+  aValue                String?  // From column "A"
+  contactNo             String?
+  dvrConnected          String?
+  simNo                 String?
+  deviceName            String?
+  deviceLicense         String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
