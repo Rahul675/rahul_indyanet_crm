@@ -15,12 +15,15 @@ import { AuditModule } from "./modules/audit/audit.module";
 import { AuthModule } from "./modules/auth/auth.module";
 import { OperatorModule } from "./modules/operator/operator.module"; // ✅ Added Operator module
 import { MailerModule } from "./mailers/mailer.modules";
+import { ClusterModule } from "./modules/cluster/cluster.module";
+import { SearchModule } from "./modules/search/search.module";
 
 @Module({
   imports: [
     ScheduleModule.forRoot(),
     PrismaModule,
     CustomersModule,
+    ClusterModule,
     IssuesModule,
     OtherClientsModule,
     LoadShareModule,
@@ -30,6 +33,7 @@ import { MailerModule } from "./mailers/mailer.modules";
     AuditModule,
     NotificationModule,
     AuthModule,
+    SearchModule,
     MailerModule,
     OperatorModule, // ✅ Register OperatorModule
   ],

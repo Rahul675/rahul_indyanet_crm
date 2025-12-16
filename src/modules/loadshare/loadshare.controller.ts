@@ -29,7 +29,7 @@ import { JwtAuthGuard } from "../auth/jwt-auth.guard";
 export class LoadShareController {
   constructor(private readonly service: LoadShareService) {}
 
-  // ✅ Create
+  /* ----------------------- Create ----------------------- */
   @UseGuards(JwtAuthGuard)
   @Post()
   @ApiOperation({ summary: "Create a LoadShare record" })
@@ -42,25 +42,35 @@ export class LoadShareController {
     };
   }
 
-  // ✅ Get all / search
+  /* ----------------------- Read ----------------------- */
   @UseGuards(JwtAuthGuard)
   @Get()
-  @ApiOperation({ summary: "Get all LoadShare records or search" })
-  async findAll(@Query("search") search?: string) {
-    const data = await this.service.findAll(search);
-    return { success: true, count: data.length, data };
+  @ApiOperation({ summary: "Get LoadShare records by cluster" })
+  async findAll(
+    @Query("clusterId") clusterId: string,
+    @Query("search") search?: string
+  ) {
+    if (!clusterId) {
+      throw new BadRequestException("clusterId is required");
+    }
+
+    const data = await this.service.findAll(search, clusterId);
+    return {
+      success: true,
+      count: data.length,
+      data,
+    };
   }
 
-  // ✅ Get by ID
   @UseGuards(JwtAuthGuard)
   @Get(":id")
-  @ApiOperation({ summary: "Get a single LoadShare record by ID" })
+  @ApiOperation({ summary: "Get a single LoadShare record" })
   async findOne(@Param("id") id: string) {
     const record = await this.service.findOne(id);
     return { success: true, data: record };
   }
 
-  // ✅ Update
+  /* ----------------------- Update ----------------------- */
   @UseGuards(JwtAuthGuard)
   @Patch(":id")
   @ApiOperation({ summary: "Update LoadShare record" })
@@ -73,7 +83,7 @@ export class LoadShareController {
     };
   }
 
-  // ✅ Delete single (Admins only)
+  /* ----------------------- Delete ----------------------- */
   @UseGuards(JwtAuthGuard)
   @Delete(":id")
   @ApiOperation({ summary: "Delete LoadShare record (Admins only)" })
@@ -91,69 +101,89 @@ export class LoadShareController {
     };
   }
 
-  // ✅ Delete ALL (Admins only)
+  /* ----------------------- Clear Cluster ----------------------- */
   @UseGuards(JwtAuthGuard)
-  @Delete("clear/all")
-  @ApiOperation({ summary: "Delete ALL LoadShare records (Admins only)" })
-  async clearAll(@Req() req: Request) {
+  @Delete("clear/cluster")
+  @ApiOperation({ summary: "Delete ALL LoadShares of a cluster (Admins only)" })
+  async clearCluster(
+    @Query("clusterId") clusterId: string,
+    @Req() req: Request
+  ) {
     const user = (req as any).user;
 
     if (!user || user.role !== "admin") {
-      throw new ForbiddenException("Only admins can clear all records");
+      throw new ForbiddenException("Only admins can clear records");
     }
 
-    const result = await this.service.clearAll();
+    if (!clusterId) {
+      throw new BadRequestException("clusterId is required");
+    }
+
+    const result = await this.service.clearAll(clusterId);
+
     return {
       success: true,
-      message: "🧹 All LoadShare records deleted successfully",
+      message: "🧹 Cluster LoadShares deleted successfully",
       deletedCount: result.count,
     };
   }
 
-  // ✅ Export Excel
+  /* ----------------------- Export Excel ----------------------- */
   @UseGuards(JwtAuthGuard)
   @Get("export/excel")
-  @ApiOperation({ summary: "Export all LoadShare records as Excel" })
-  async exportExcel(@Res() res: Response) {
-    try {
-      const data = await this.service.findAll();
-      if (!data.length)
-        throw new BadRequestException("No LoadShare records found to export");
-
-      const worksheet = XLSX.utils.json_to_sheet(data);
-      const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, worksheet, "LoadShare");
-
-      const buffer = XLSX.write(workbook, { type: "buffer", bookType: "xlsx" });
-
-      const filename = `LoadShare_Export_${new Date()
-        .toISOString()
-        .slice(0, 10)}.xlsx`;
-
-      res.setHeader(
-        "Content-Disposition",
-        `attachment; filename=\"${filename}\"`
-      );
-      res.setHeader(
-        "Content-Type",
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-      );
-
-      res.send(buffer);
-    } catch (err) {
-      console.error("❌ Excel export failed:", err);
-      throw new BadRequestException("Failed to export Excel file");
+  @ApiOperation({ summary: "Export LoadShares of a cluster as Excel" })
+  async exportExcel(
+    @Query("clusterId") clusterId: string,
+    @Res() res: Response
+  ) {
+    if (!clusterId) {
+      throw new BadRequestException("clusterId is required");
     }
+
+    const data = await this.service.findAll(undefined, clusterId);
+    if (!data.length) {
+      throw new BadRequestException("No LoadShare records found");
+    }
+
+    const worksheet = XLSX.utils.json_to_sheet(data);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "LoadShare");
+
+    const buffer = XLSX.write(workbook, {
+      type: "buffer",
+      bookType: "xlsx",
+    });
+
+    const filename = `LoadShare_${clusterId}_${new Date()
+      .toISOString()
+      .slice(0, 10)}.xlsx`;
+
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+
+    res.send(buffer);
   }
 
-  // ✅ Import Excel
+  // Import Excel (clusterId added automatically)
   @UseGuards(JwtAuthGuard)
   @Post("import/excel")
   @UseInterceptors(FileInterceptor("file"))
   @ApiConsumes("multipart/form-data")
-  @ApiOperation({ summary: "Bulk import LoadShare records from Excel file" })
-  async importExcel(@UploadedFile() file: Express.Multer.File) {
+  @ApiOperation({
+    summary:
+      "Bulk import LoadShare records from Excel file (clusterId added automatically)",
+  })
+  async importExcel(
+    @UploadedFile() file: Express.Multer.File,
+    @Query("clusterId") clusterId: string
+  ) {
     if (!file) throw new BadRequestException("No Excel file uploaded");
+    if (!clusterId) {
+      throw new BadRequestException("clusterId is required");
+    }
 
     try {
       const workbook = XLSX.read(file.buffer, { type: "buffer" });
@@ -165,7 +195,9 @@ export class LoadShareController {
       if (!rawData.length)
         throw new BadRequestException("Excel file appears to be empty.");
 
+      // Automatically attach clusterId to each record
       const normalizedData = rawData.map((row) => ({
+        clusterId, // ✅ Added automatically
         rtNumber: row["RT number"]?.trim() || "",
         nameOfLocation: row["Name of Location"] || "",
         address: "-",
@@ -196,9 +228,7 @@ export class LoadShareController {
         success: true,
         message: `✅ Imported ${result.importedCount} records successfully.`,
         imported: result.importedCount,
-        skipped: result.skippedCount,
-        missingRtNumbers: result.missingRtNumbers,
-        duplicateRtNumbers: result.duplicateRtNumbers,
+        records: result.data,
       };
     } catch (err: any) {
       console.error("❌ Excel import failed:", err);

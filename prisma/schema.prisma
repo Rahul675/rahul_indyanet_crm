@@ -36,6 +36,22 @@ model Customer {
   @@map("customers")
 }
 
+
+model Cluster {
+  id         String     @id @default(uuid())
+  code       String     @unique
+  name       String
+  state      String
+  status     String     @default("Active")
+
+  loadshares LoadShare[]
+
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+
+  @@map("clusters")
+}
+
 //////////////////////////////////////////////////////
 // 📦 Issues
 //////////////////////////////////////////////////////
@@ -98,14 +114,14 @@ model LoadShare {
   state               String
   circuitId           String
   isp                 String
-  rtNumber            String   @unique
+  rtNumber            String   
   invoice             String?
   speed               String
   status              String   @default("Active")
   validity            Int
   paidBy              String
-  activationDate      DateTime
-  expiryDate          DateTime
+  activationDate      DateTime?
+  expiryDate          DateTime?
   installationCharges Float
   internetCharges     Float
   gstPercent          Float
@@ -118,11 +134,18 @@ model LoadShare {
   hubSpocName         String?
   hubSpocNumber       String?
 
+  // 🔗 Cluster relation
+  clusterId           String
+  cluster             Cluster @relation(fields: [clusterId], references: [id], onDelete: Cascade)
+
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@unique([rtNumber, clusterId])
   @@index([rtNumber])
   @@index([nameOfLocation])
+  @@index([clusterId])
   @@map("loadshare")
 }
 
