@@ -304,7 +304,8 @@ export class LoadShareService {
     skip = 0,
     take?: number,
     sortBy = "createdAt",
-    sortOrder: Prisma.SortOrder = "desc"
+    sortOrder: Prisma.SortOrder = "desc",
+    month?: string // 👈 Step 3: Add month parameter
   ) {
     if (!clusterId) {
       throw new BadRequestException("clusterId is required");
@@ -321,6 +322,26 @@ export class LoadShareService {
         ],
       }),
     };
+
+    // 👈 Step 4: Logic to filter by expiryDate month
+    // inside loadshare.service.ts -> findAll()
+    if (month !== undefined && month !== "") {
+      const monthIndex = parseInt(month);
+      const currentYear = new Date().getUTCFullYear(); // Use UTC year
+
+      // Start: 1st day of the month at 00:00:00 UTC
+      const startDate = new Date(Date.UTC(currentYear, monthIndex, 1, 0, 0, 0));
+
+      // End: Last day of the month at 23:59:59 UTC
+      const endDate = new Date(
+        Date.UTC(currentYear, monthIndex + 1, 0, 23, 59, 59, 999)
+      );
+
+      where.expiryDate = {
+        gte: startDate,
+        lte: endDate,
+      };
+    }
 
     return this.prisma.loadShare.findMany({
       where,

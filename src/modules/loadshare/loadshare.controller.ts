@@ -131,30 +131,52 @@ export class LoadShareController {
   /* ----------------------- Export Excel ----------------------- */
   @UseGuards(JwtAuthGuard)
   @Get("export/excel")
-  @ApiOperation({ summary: "Export LoadShares of a cluster as Excel" })
   async exportExcel(
+    @Res() res: Response,
     @Query("clusterId") clusterId: string,
-    @Res() res: Response
+    @Query("month") month?: string // ✅ Capture month index from query
   ) {
     if (!clusterId) {
       throw new BadRequestException("clusterId is required");
     }
 
-    const data = await this.service.findAll(undefined, clusterId);
+    // ✅ Pass the month to the service to filter the data
+    const data = await this.service.findAll(
+      undefined,
+      clusterId,
+      0,
+      undefined,
+      "createdAt",
+      "desc",
+      month
+    );
+
     if (!data.length) {
-      throw new BadRequestException("No LoadShare records found");
+      throw new BadRequestException("No records found for the selected month");
     }
 
     const worksheet = XLSX.utils.json_to_sheet(data);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "LoadShare");
 
-    const buffer = XLSX.write(workbook, {
-      type: "buffer",
-      bookType: "xlsx",
-    });
+    const buffer = XLSX.write(workbook, { type: "buffer", bookType: "xlsx" });
 
-    const filename = `LoadShare_${clusterId}_${new Date()
+    const months = [
+      "Jan",
+      "Feb",
+      "Mar",
+      "Apr",
+      "May",
+      "Jun",
+      "Jul",
+      "Aug",
+      "Sep",
+      "Oct",
+      "Nov",
+      "Dec",
+    ];
+    const monthName = month ? `_${months[parseInt(month)]}` : "_All";
+    const filename = `LoadShare_${monthName}_${new Date()
       .toISOString()
       .slice(0, 10)}.xlsx`;
 
@@ -163,7 +185,6 @@ export class LoadShareController {
       "Content-Type",
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     );
-
     res.send(buffer);
   }
 
