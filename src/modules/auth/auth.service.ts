@@ -8,6 +8,7 @@ import { AuditService } from "../audit/audit.service";
 import { NotificationService } from "../notifications/notification.service";
 import { JwtService } from "@nestjs/jwt";
 import * as bcrypt from "bcrypt";
+import { ChangePasswordDto } from "./dto/change-password.dto";
 
 @Injectable()
 export class AuthService {
@@ -77,6 +78,7 @@ export class AuthService {
 
     const payload = { sub: user.id, email: user.email, role: user.role };
     const accessToken = this.jwtService.sign(payload);
+    const refreshToken = this.jwtService.sign(payload, { expiresIn: "30d" });
 
     await this.audit.logAction(
       user.id,
@@ -95,6 +97,39 @@ export class AuthService {
         role: user.role,
       },
       token: accessToken,
+      refreshToken,
+    };
+  }
+
+  async refresh(refreshToken: string) {
+    if (!refreshToken) {
+      throw new BadRequestException("Refresh token is required.");
+    }
+
+    let payload: any;
+    try {
+      payload = this.jwtService.verify(refreshToken);
+    } catch (e) {
+      throw new UnauthorizedException("Invalid refresh token.");
+    }
+
+    const user = await this.prisma.user.findUnique({ where: { id: payload.sub } });
+    if (!user) {
+      throw new UnauthorizedException("User not found.");
+    }
+
+    const newAccessToken = this.jwtService.sign({ sub: user.id, email: user.email, role: user.role });
+
+    await this.audit.logAction(
+      user.id,
+      "TOKEN_REFRESH",
+      "User",
+      `${user.name} refreshed access token`
+    );
+
+    return {
+      success: true,
+      token: newAccessToken,
     };
   }
 
@@ -152,5 +187,60 @@ export class AuthService {
       },
       orderBy: { createdAt: "desc" },
     });
+  }
+
+  async changePassword(userId: string, dto: ChangePasswordDto) {
+    const { oldPassword, newPassword, confirmPassword } = dto;
+
+    // Validate that new password and confirm password match
+    if (newPassword !== confirmPassword) {
+      throw new BadRequestException("New password and confirm password do not match.");
+    }
+
+    // Validate new password is different from old password
+    if (oldPassword === newPassword) {
+      throw new BadRequestException("New password must be different from old password.");
+    }
+
+    // Find the user
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) {
+      throw new UnauthorizedException("User not found.");
+    }
+
+    // Verify old password
+    const isOldPasswordValid = await bcrypt.compare(oldPassword, user.password);
+    if (!isOldPasswordValid) {
+      throw new UnauthorizedException("Current password is incorrect.");
+    }
+
+    // Hash new password
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    // Update password in database
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { password: hashedPassword },
+    });
+
+    // Log the action
+    await this.audit.logAction(
+      userId,
+      "CHANGE_PASSWORD",
+      "User",
+      `${user.name} changed their password`
+    );
+
+    // Create notification
+    await this.notifications.createNotification(
+      "Password Changed",
+      `Your password was successfully changed on ${new Date().toLocaleString()}`,
+      userId
+    );
+
+    return {
+      success: true,
+      message: "Password changed successfully",
+    };
   }
 }

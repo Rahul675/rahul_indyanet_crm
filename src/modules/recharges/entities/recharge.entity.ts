@@ -5,7 +5,10 @@ export class RechargeEntity {
   id!: string;
 
   @ApiProperty()
-  customerId!: string;
+  clusterId!: string;
+
+  @ApiProperty()
+  loadshareId!: string;
 
   @ApiProperty()
   planType!: string;

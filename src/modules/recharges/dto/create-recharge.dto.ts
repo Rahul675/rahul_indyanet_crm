@@ -10,7 +10,11 @@ import {
 export class CreateRechargeDto {
   @ApiProperty()
   @IsString()
-  customerId!: string;
+  clusterId!: string;
+
+  @ApiProperty()
+  @IsString()
+  loadshareId!: string;
 
   @ApiProperty()
   @IsString()

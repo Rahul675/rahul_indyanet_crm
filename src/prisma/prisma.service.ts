@@ -38,13 +38,13 @@ export class PrismaService
     });
 
     // 👇 Log queries only in development
-    if (process.env.NODE_ENV !== "production") {
-      (this as any).$on("query", (event: Prisma.QueryEvent) => {
-        this.logger.debug(
-          `🟢 Prisma Query: ${event.query} — Params: ${event.params}`
-        );
-      });
-    }
+    // if (process.env.NODE_ENV !== "production") {
+    //   (this as any).$on("query", (event: Prisma.QueryEvent) => {
+    //     this.logger.debug(
+    //       `🟢 Prisma Query: ${event.query} — Params: ${event.params}`
+    //     );
+    //   });
+    // }
   }
 
   // 🟢 Connect to the database with retry logic

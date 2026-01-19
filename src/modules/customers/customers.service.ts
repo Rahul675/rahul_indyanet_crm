@@ -1,9 +1,10 @@
 // src/modules/customers/customers.service.ts
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "../../prisma/prisma.service";
-import { NotificationService } from "../notifications/notification.service"; // ✅ add
+import { NotificationService } from "../notifications/notification.service";
 import { CreateCustomerDto } from "./dto/create-customer.dto";
 import { UpdateCustomerDto } from "./dto/update-customer.dto";
+import * as ExcelJS from "exceljs";
 
 @Injectable()
 export class CustomersService {
@@ -14,16 +15,28 @@ export class CustomersService {
 
   async create(data: CreateCustomerDto) {
     const parsedDate = new Date(data.installDate);
-    const randomSuffix = Math.floor(1000 + Math.random() * 9000);
-    const customerCode = `CUST-${randomSuffix}`;
-
-    const customer = await this.prisma.customer.create({
-      data: {
-        customerCode,
-        ...data,
-        installDate: parsedDate,
-      },
-    });
+    // Generate unique code with retry on unique violation
+    let customer;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const code = `CUST-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+      try {
+        customer = await this.prisma.customer.create({
+          data: {
+            customerCode: code,
+            ...data,
+            installDate: parsedDate,
+          },
+        });
+        break;
+      } catch (e: any) {
+        // Prisma unique constraint violation code
+        if (e?.code === "P2002") {
+          continue; // retry
+        }
+        throw e;
+      }
+    }
+    if (!customer) throw new Error("Failed to generate unique customer code");
 
     // 🔔 Create notification
     await this.notifications.createNotification(
@@ -61,5 +74,110 @@ export class CustomersService {
   async remove(id: string) {
     await this.findOne(id);
     return this.prisma.customer.delete({ where: { id } });
+  }
+
+  async exportToExcel(): Promise<Buffer> {
+    const customers = await this.prisma.customer.findMany({
+      orderBy: { createdAt: "desc" },
+    });
+
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet("Customers");
+
+    // Define columns
+    worksheet.columns = [
+      { header: "Customer Code", key: "customerCode", width: 20 },
+      { header: "Full Name", key: "fullName", width: 25 },
+      { header: "Contact Number", key: "contactNumber", width: 15 },
+      { header: "Email", key: "email", width: 30 },
+      { header: "Address", key: "address", width: 40 },
+      { header: "Services Type", key: "servicesType", width: 20 },
+      { header: "Payment Mode", key: "paymentMode", width: 15 },
+      { header: "Connection Status", key: "connectionStatus", width: 15 },
+      { header: "Install Date", key: "installDate", width: 15 },
+    ];
+
+    // Add rows
+    customers.forEach((customer) => {
+      worksheet.addRow({
+        customerCode: customer.customerCode,
+        fullName: customer.fullName,
+        contactNumber: customer.contactNumber,
+        email: "",
+        address: "",
+        servicesType: customer.servicesType,
+        paymentMode: customer.paymentMode || "",
+        connectionStatus: customer.connectionStatus,
+        installDate: customer.installDate
+          ? new Date(customer.installDate).toLocaleDateString()
+          : "",
+      });
+    });
+
+    // Style header row
+    worksheet.getRow(1).font = { bold: true };
+    worksheet.getRow(1).fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FFE0E0E0" },
+    };
+
+    return Buffer.from(await workbook.xlsx.writeBuffer());
+  }
+
+  async importFromExcel(buffer: Buffer) {
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(buffer as any);
+
+    const worksheet = workbook.getWorksheet(1);
+    if (!worksheet) {
+      throw new Error("No worksheet found in Excel file");
+    }
+
+    const imported: Promise<any>[] = [];
+    const errors: { row: number; error: string }[] = [];
+
+    worksheet.eachRow((row, rowNumber) => {
+      if (rowNumber === 1) return; // Skip header
+
+      try {
+        const cellValue = row.getCell(9).value;
+        const data = {
+          fullName: row.getCell(2).value?.toString() || "",
+          contactNumber: row.getCell(3).value?.toString() || "",
+          servicesType: row.getCell(6).value?.toString() || "",
+          paymentMode: row.getCell(7).value?.toString() || "",
+          connectionStatus: row.getCell(8).value?.toString() || "Active",
+          installDate:
+            cellValue && cellValue.toString()
+              ? new Date(cellValue.toString())
+              : new Date(),
+        };
+
+        // Generate customer code
+        const code = `CUST-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+
+        imported.push(
+          this.prisma.customer.create({
+            data: {
+              customerCode: code,
+              ...data,
+            },
+          })
+        );
+      } catch (err) {
+        const errorMessage =
+          err instanceof Error ? err.message : "Unknown error";
+        errors.push({ row: rowNumber, error: errorMessage });
+      }
+    });
+
+    const results = await Promise.allSettled(imported);
+    const successful = results.filter((r) => r.status === "fulfilled").length;
+
+    return {
+      message: `Imported ${successful} customers successfully`,
+      errors: errors.length > 0 ? errors : undefined,
+    };
   }
 }

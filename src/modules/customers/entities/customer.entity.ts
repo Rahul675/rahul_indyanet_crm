@@ -14,7 +14,10 @@ export class CustomerEntity {
   contactNumber!: string;
 
   @ApiProperty({ example: "200 Mbps" })
-  planType!: string;
+  servicesType!: string;
+
+  @ApiProperty({ example: "Cash" })
+  paymentMode?: string;
 
   @ApiProperty({ example: "Active" })
   connectionStatus!: string;

@@ -1,5 +1,6 @@
 import { Module } from "@nestjs/common";
 import { ScheduleModule } from "@nestjs/schedule";
+import { ConfigModule } from "@nestjs/config"; // ✅ Add ConfigModule
 import { PrismaModule } from "./prisma/prisma.module";
 import { PrismaService } from "./prisma/prisma.service";
 import { CustomersModule } from "./modules/customers/customers.module";
@@ -20,6 +21,11 @@ import { SearchModule } from "./modules/search/search.module";
 
 @Module({
   imports: [
+    // ✅ Load .env globally
+    ConfigModule.forRoot({
+      isGlobal: true,
+      envFilePath: ".env",
+    }),
     ScheduleModule.forRoot(),
     PrismaModule,
     CustomersModule,
