@@ -1,4 +1,4 @@
-import { IsString, IsDateString, IsOptional } from "class-validator";
+import { IsString, IsDateString, IsOptional, IsObject } from "class-validator";
 import { ApiProperty } from "@nestjs/swagger";
 
 export class CreateCustomerDto {
@@ -12,7 +12,12 @@ export class CreateCustomerDto {
 
   @ApiProperty({ example: "200 Mbps" })
   @IsString()
-  planType!: string;
+  servicesType!: string;
+
+  @ApiProperty({ example: "Cash", required: false })
+  @IsOptional()
+  @IsString()
+  paymentMode?: string;
 
   @ApiProperty({ example: "Active", required: false })
   @IsOptional()
@@ -25,4 +30,18 @@ export class CreateCustomerDto {
   })
   @IsDateString()
   installDate!: string;
+
+  @ApiProperty({
+    example: {
+      "Email Address": "user@example.com",
+      "Secondary Phone": "+91-9876543210",
+      "Address": "123 Main St, City, State",
+      "Account Manager": "John Doe"
+    },
+    required: false,
+    description: "Additional optional information as key-value pairs",
+  })
+  @IsOptional()
+  @IsObject()
+  additionalInfo?: Record<string, string>;
 }

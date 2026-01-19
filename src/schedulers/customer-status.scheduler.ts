@@ -8,10 +8,8 @@ export class CustomerStatusScheduler {
 
   @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
   async deactivateExpiredCustomers() {
-    await this.prisma.customer.updateMany({
-      where: { expiryDate: { lt: new Date() }, connectionStatus: "Active" },
-      data: { connectionStatus: "Inactive" },
-    });
-    console.log("✅ Deactivated expired customers at midnight");
+    // Note: Customer expiry logic has been moved to Recharge model
+    // This scheduler is kept for future use or can be removed if not needed
+    console.log("✅ Customer status scheduler running at midnight");
   }
 }

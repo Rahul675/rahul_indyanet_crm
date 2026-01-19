@@ -409,6 +409,8 @@ export class LoadShareService {
     }
 
     const seen = new Set<string>();
+    const duplicateRtNumbers: string[] = [];
+    const existingRtNumbers: string[] = [];
     let importedCount = 0;
 
     const results = await Promise.all(
@@ -416,11 +418,25 @@ export class LoadShareService {
         const rt = entry.rtNumber?.trim();
         if (!rt || !entry.clusterId) return null;
 
-        const key = `${rt}-${entry.clusterId}`;
-        if (seen.has(key)) return null;
-        seen.add(key);
+        // Check for duplicates within the import batch
+        if (seen.has(rt)) {
+          duplicateRtNumbers.push(rt);
+          return null;
+        }
+        seen.add(rt);
 
         await this.validateCluster(entry.clusterId);
+
+        // Check if RT number already exists in database
+        const existingRecord = await this.prisma.loadShare.findUnique({
+          where: { rtNumber: rt },
+        });
+
+        // If RT number already exists, skip it
+        if (existingRecord) {
+          existingRtNumbers.push(rt);
+          return null;
+        }
 
         const { gstAmount, totalPayable } = this.calculateAmounts(
           Number(entry.internetCharges) || 0,
@@ -478,24 +494,11 @@ export class LoadShareService {
           gstPercent: Number(entry.gstPercent) || 0,
         };
 
-        const record = await this.prisma.loadShare.upsert({
-          where: {
-            rtNumber_clusterId: {
-              rtNumber: rt,
-              clusterId: entry.clusterId,
-            },
-          },
-          update: {
+        const record = await this.prisma.loadShare.create({
+          data: {
             ...cleanEntry,
-            activationDate, // ✅ Date | null
-            expiryDate, // ✅ Date | null
-            gstAmount,
-            totalPayable,
-          },
-          create: {
-            ...cleanEntry,
-            activationDate, // ✅ Date | null
-            expiryDate, // ✅ Date | null
+            activationDate,
+            expiryDate,
             gstAmount,
             totalPayable,
           },
@@ -506,9 +509,20 @@ export class LoadShareService {
       })
     );
 
+    const totalSkipped = duplicateRtNumbers.length + existingRtNumbers.length;
+    const messages: string[] = [];
+    
+    if (importedCount > 0) messages.push(`${importedCount} new record(s) imported`);
+    if (duplicateRtNumbers.length > 0) messages.push(`${duplicateRtNumbers.length} duplicate RT number(s) in file were skipped`);
+    if (existingRtNumbers.length > 0) messages.push(`${existingRtNumbers.length} RT number(s) already exist and were skipped`);
+
     return {
       success: true,
       importedCount,
+      skippedCount: totalSkipped,
+      duplicateRtNumbers: duplicateRtNumbers.length > 0 ? duplicateRtNumbers : undefined,
+      existingRtNumbers: existingRtNumbers.length > 0 ? existingRtNumbers : undefined,
+      message: messages.join('. '),
       data: results.filter(Boolean),
     };
   }

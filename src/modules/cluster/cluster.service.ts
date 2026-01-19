@@ -11,22 +11,22 @@ export class ClusterService {
   async create(dto: CreateClusterDto) {
     return this.prisma.cluster.create({
       data: {
-        code: dto.code,
         name: dto.name,
-        state: dto.state,
         status: dto.status ?? "Active",
+        assignedOperators: dto.assignedOperators ?? [],
       },
     });
   }
 
   // ✅ Get all clusters
-  async findAll() {
+  async findAll(user: any) {
+    const isAdmin = (user?.role || "").toLowerCase() === "admin";
+
     return this.prisma.cluster.findMany({
+      where: isAdmin ? {} : { assignedOperators: { has: user?.id } },
       orderBy: { createdAt: "desc" },
       include: {
-        _count: {
-          select: { loadshares: true }, // 👈 useful for UI
-        },
+        loadshares: true,
       },
     });
   }

@@ -7,117 +7,93 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-//////////////////////////////////////////////////////
-// 🧍 Customers & Related Models
-//////////////////////////////////////////////////////
-
 model Customer {
-  id               String     @id @default(cuid())
-  customerCode     String     @unique
+  id               String   @id @default(cuid())
   fullName         String
   contactNumber    String
-  planType         String
-  connectionStatus String     @default("Active") // Active | Inactive | Suspended | Deactivated
+  servicesType     String
+  connectionStatus String   @default("Active")
   installDate      DateTime
-  lastRechargeDate DateTime?  // Latest recharge
-  expiryDate       DateTime?  // Expiry of active plan
-  totalRecharges   Int        @default(0)
-  totalSpent       Float      @default(0)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // Relations
-  issues     Issue[]     @relation("CustomerIssues")
-  recharges  Recharge[]  @relation("CustomerRecharges")
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  customerCode     String   @unique
+  totalSpent       Float    @default(0)
+  additionalInfo   Json     @default("{}")
+  paymentMode      String?
+  issues           Issue[]  @relation("CustomerIssues")
 
   @@index([connectionStatus])
   @@index([installDate])
   @@map("customers")
 }
 
-
 model Cluster {
-  id         String     @id @default(uuid())
-  code       String     @unique
-  name       String
-  state      String
-  status     String     @default("Active")
-
-  loadshares LoadShare[]
-
-  createdAt  DateTime   @default(now())
-  updatedAt  DateTime   @updatedAt
+  id                String      @id @default(uuid())
+  name              String
+  createdAt         DateTime    @default(now())
+  status            String      @default("Active")
+  updatedAt         DateTime    @updatedAt
+  assignedOperators String[]    @default([])
+  loadshares        LoadShare[]
+  recharges         Recharge[]
 
   @@map("clusters")
 }
 
-//////////////////////////////////////////////////////
-// 📦 Issues
-//////////////////////////////////////////////////////
-
 model Issue {
   id              String    @id @default(cuid())
-  customerId      String
-  customer        Customer  @relation("CustomerIssues", fields: [customerId], references: [id], onDelete: Cascade)
   category        String
   description     String
-  status          String    @default("Pending") // Pending | Resolved | Escalated
+  status          String    @default("Pending")
   assignee        String?
   createdDate     DateTime  @default(now())
   resolvedDate    DateTime?
   resolutionNotes String?
+  customerId      String
   updatedAt       DateTime  @updatedAt
+  customer        Customer  @relation("CustomerIssues", fields: [customerId], references: [id], onDelete: Cascade)
 
   @@index([customerId])
   @@index([status])
   @@map("issues")
 }
 
-//////////////////////////////////////////////////////
-// 💰 Recharges
-//////////////////////////////////////////////////////
-
 model Recharge {
-  id            String    @id @default(cuid())
-  customerId    String
-  customer      Customer  @relation("CustomerRecharges", fields: [customerId], references: [id], onDelete: Cascade)
+  id            String         @id @default(cuid())
   planType      String
   rechargeDate  DateTime
   amount        Float
   validityDays  Int
   expiryDate    DateTime
-  status        String    @default("Active") // Active | Expired | Cancelled
+  status        String         @default("Active")
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
   paymentMethod String?
-  transactionId String?
   remarks       String?
+  transactionId String?
+  clusterId     String?
+  loadshareId   String?
+  notifications Notification[]
+  cluster       Cluster?       @relation(fields: [clusterId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  loadshare     LoadShare?     @relation(fields: [loadshareId], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // Relations
-  notifications Notification[] // Notifications for expiring or completed recharges
-
-  @@index([customerId])
+  @@index([clusterId])
+  @@index([loadshareId])
   @@index([rechargeDate])
   @@map("recharges")
 }
 
-//////////////////////////////////////////////////////
-// 🌐 LoadShare (Infrastructure)
-//////////////////////////////////////////////////////
-
 model LoadShare {
-  id                  String   @id @default(cuid())
+  id                  String     @id @default(cuid())
   nameOfLocation      String
   address             String
   state               String
   circuitId           String
   isp                 String
-  rtNumber            String   
+  rtNumber            String     @unique
   invoice             String?
   speed               String
-  status              String   @default("Active")
+  status              String     @default("Active")
   validity            Int
   paidBy              String
   activationDate      DateTime?
@@ -133,79 +109,61 @@ model LoadShare {
   wifiOrNumber        String?
   hubSpocName         String?
   hubSpocNumber       String?
-
-  // 🔗 Cluster relation
+  createdAt           DateTime   @default(now())
+  updatedAt           DateTime   @updatedAt
   clusterId           String
-  cluster             Cluster @relation(fields: [clusterId], references: [id], onDelete: Cascade)
+  cluster             Cluster    @relation(fields: [clusterId], references: [id], onDelete: Cascade)
+  recharges           Recharge[]
 
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@unique([rtNumber, clusterId])
-  @@index([rtNumber])
   @@index([nameOfLocation])
   @@index([clusterId])
   @@map("loadshare")
 }
 
-//////////////////////////////////////////////////////
-// 🖥️ Other Clients
-//////////////////////////////////////////////////////
-
 model OtherClient {
-  id                    String   @id @default(cuid())
-  site                  String
-  publicIp1             String?  // New
-  publicIp2             String?  // New
-  isp1                  String?  // New
-  isp2                  String?  // New
-  lanIp                 String?
-  remarks               String?
-  macId                 String?
-  landlineWifiId        String?
-  speedMbps             String?  // Changed from Int to String
-  internetInstallation  String?  // Combined field
-  prevBillReceived      String?  // Changed from Float to String
-  dispatchDate          DateTime? // Changed to DateTime
-  reachedDayDate        DateTime? // Changed to DateTime
-  installationDate      DateTime?
-  aValue                String?  // From column "A"
-  contactNo             String?
-  dvrConnected          String?
-  simNo                 String?
-  deviceName            String?
-  deviceLicense         String?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                   String    @id @default(cuid())
+  site                 String
+  lanIp                String?
+  remarks              String?
+  macId                String?
+  landlineWifiId       String?
+  speedMbps            String?
+  installationDate     DateTime?
+  contactNo            String?
+  dvrConnected         String?
+  simNo                String?
+  deviceName           String?
+  deviceLicense        String?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+  aValue               String?
+  dispatchDate         DateTime?
+  internetInstallation String?
+  isp1                 String?
+  isp2                 String?
+  prevBillReceived     String?
+  publicIp1            String?
+  publicIp2            String?
+  reachedDayDate       DateTime?
 
   @@index([site])
   @@map("other_clients")
 }
 
-//////////////////////////////////////////////////////
-// 👤 Users (Admin / Operators / Technicians)
-//////////////////////////////////////////////////////
-
 model User {
-  id           String        @id @default(cuid())
-  name         String
-  email        String        @unique
-  password     String
-  role         String        @default("operator") // admin | operator | technician
-  isOnline     Boolean       @default(false)
-  lastActiveAt DateTime      @default(now())
-
-  lastLoginAt  DateTime?
-  lastLogoutAt DateTime?
-  logoutReason String?
-
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
-
-  // Relations
-  auditLogs    AuditLog[]
+  id            String         @id @default(cuid())
+  name          String
+  email         String         @unique
+  password      String
+  isOnline      Boolean        @default(false)
+  lastActiveAt  DateTime       @default(now())
+  role          String         @default("operator")
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  lastLoginAt   DateTime?
+  lastLogoutAt  DateTime?
+  logoutReason  String?
+  auditLogs     AuditLog[]
   notifications Notification[]
 
   @@index([email])
@@ -213,40 +171,30 @@ model User {
   @@map("users")
 }
 
-//////////////////////////////////////////////////////
-// 🧾 Audit Logs (System Activity)
-//////////////////////////////////////////////////////
-
 model AuditLog {
   id        String   @id @default(cuid())
-  userId    String?
-  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
-  action    String   // e.g., "LOGIN", "LOGOUT", "CREATE_CUSTOMER", "ADD_RECHARGE"
-  entity    String   // e.g., "User", "Recharge", "Customer"
+  action    String
+  entity    String
   detail    String?
   createdAt DateTime @default(now())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id])
 
   @@index([userId])
   @@index([action])
   @@map("audit_logs")
 }
 
-//////////////////////////////////////////////////////
-// 🔔 Notifications (System Alerts)
-//////////////////////////////////////////////////////
-
 model Notification {
-  id          String    @id @default(cuid())
-  userId      String?
-  user        User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  rechargeId  String?
-  recharge    Recharge? @relation(fields: [rechargeId], references: [id], onDelete: Cascade)
-
-  type        String    // e.g., "employee_add", "recharge_add", "recharge_expiring"
-  message     String
-  read        Boolean   @default(false)
-
-  createdAt   DateTime  @default(now())
+  id         String    @id @default(cuid())
+  userId     String?
+  rechargeId String?
+  type       String
+  message    String
+  read       Boolean   @default(false)
+  createdAt  DateTime  @default(now())
+  recharge   Recharge? @relation(fields: [rechargeId], references: [id], onDelete: Cascade)
+  user       User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([rechargeId])

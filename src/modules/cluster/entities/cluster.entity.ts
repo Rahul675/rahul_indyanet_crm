@@ -8,5 +8,14 @@ export class ClusterEntity {
   name!: string;
 
   @ApiProperty()
+  status!: string;
+
+  @ApiProperty()
+  assignedOperators!: string[];
+
+  @ApiProperty()
   createdAt!: Date;
+
+  @ApiProperty()
+  updatedAt!: Date;
 }

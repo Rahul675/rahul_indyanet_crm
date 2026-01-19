@@ -6,14 +6,18 @@ import {
   Param,
   Patch,
   Delete,
+  Req,
+  UseGuards,
 } from "@nestjs/common";
 import { ApiTags, ApiOperation, ApiResponse } from "@nestjs/swagger";
 import { ClusterService } from "./cluster.service";
 import { CreateClusterDto } from "./dto/create-cluster.dto";
 import { UpdateClusterDto } from "./dto/update-cluster.dto";
 import { ClusterEntity } from "./entities/cluster.entity";
+import { JwtAuthGuard } from "../auth/jwt-auth.guard";
 
 @ApiTags("Clusters")
+@UseGuards(JwtAuthGuard)
 @Controller("clusters")
 export class ClusterController {
   constructor(private readonly clusterService: ClusterService) {}
@@ -27,8 +31,8 @@ export class ClusterController {
 
   @Get()
   @ApiOperation({ summary: "Get all clusters" })
-  findAll() {
-    return this.clusterService.findAll();
+  findAll(@Req() req: any) {
+    return this.clusterService.findAll(req.user);
   }
 
   @Get(":id")

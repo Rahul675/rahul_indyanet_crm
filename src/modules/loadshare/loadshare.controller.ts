@@ -247,8 +247,10 @@ export class LoadShareController {
 
       return {
         success: true,
-        message: `✅ Imported ${result.importedCount} records successfully.`,
+        message: result.message,
         imported: result.importedCount,
+        skipped: result.skippedCount || 0,
+        duplicates: result.duplicateRtNumbers,
         records: result.data,
       };
     } catch (err: any) {

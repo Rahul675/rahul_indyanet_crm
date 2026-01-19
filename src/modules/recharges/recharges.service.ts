@@ -1,5 +1,10 @@
 // src/modules/recharges/recharges.service.ts
-import { Injectable, NotFoundException } from "@nestjs/common";
+import {
+  Injectable,
+  NotFoundException,
+  ForbiddenException,
+  BadRequestException,
+} from "@nestjs/common";
 import { PrismaService } from "../../prisma/prisma.service";
 import { NotificationService } from "../notifications/notification.service"; // ✅ add
 import { CreateRechargeDto } from "./dto/create-recharge.dto";
@@ -12,11 +17,20 @@ export class RechargesService {
     private notifications: NotificationService // ✅ inject
   ) {}
 
-  async create(data: CreateRechargeDto) {
-    const customer = await this.prisma.customer.findUnique({
-      where: { id: data.customerId },
+  async create(data: CreateRechargeDto, user: any) {
+    const loadshare = await this.prisma.loadShare.findUnique({
+      where: { id: data.loadshareId },
+      include: { cluster: true },
     });
-    if (!customer) throw new NotFoundException("Customer not found");
+
+    if (!loadshare) throw new NotFoundException("Loadshare not found");
+    if (loadshare.clusterId !== data.clusterId)
+      throw new BadRequestException("Loadshare does not belong to cluster");
+
+    const isAdmin = (user?.role || "").toLowerCase() === "admin";
+    if (!isAdmin && !loadshare.cluster.assignedOperators.includes(user?.id)) {
+      throw new ForbiddenException("You are not assigned to this cluster");
+    }
 
     const rechargeDate = new Date(data.rechargeDate);
     const expiryDate = new Date(
@@ -25,7 +39,8 @@ export class RechargesService {
 
     const recharge = await this.prisma.recharge.create({
       data: {
-        customerId: data.customerId,
+        clusterId: data.clusterId,
+        loadshareId: data.loadshareId,
         planType: data.planType,
         rechargeDate,
         amount: data.amount,
@@ -36,53 +51,56 @@ export class RechargesService {
         remarks: data.remarks,
         status: data.status || "Active",
       },
-      include: { customer: true },
+      include: { loadshare: { include: { cluster: true } } },
     });
 
-    await this.prisma.customer.update({
-      where: { id: data.customerId },
-      data: {
-        planType: data.planType,
-        lastRechargeDate: rechargeDate,
+    // Update loadshare expiry date, speed, and validity to match recharge
+    await this.prisma.loadShare.update({
+      where: { id: data.loadshareId },
+      data: { 
         expiryDate,
-        connectionStatus: "Active",
-        totalRecharges: { increment: 1 },
-        totalSpent: { increment: data.amount },
+        speed: data.planType,
+        validity: data.validityDays,
       },
     });
-
-    // 🔔 Notify new recharge
-    await this.notifications.createNotification(
-      "Recharge Added",
-      `Recharge created for ${
-        customer.fullName || customer.customerCode
-      }. Expiry: ${expiryDate.toDateString()}.`
-    );
 
     return recharge;
   }
 
-  async findAll() {
-    return this.prisma.recharge.findMany({
+  async findAll(user: any, opts?: { clusterId?: string; loadshareId?: string; limit?: number }) {
+    const isAdmin = (user?.role || "").toLowerCase() === "admin";
+
+    const recharges = await this.prisma.recharge.findMany({
+      where: {
+        ...(opts?.clusterId ? { clusterId: opts.clusterId } : {}),
+        ...(opts?.loadshareId ? { loadshareId: opts.loadshareId } : {}),
+        ...(isAdmin
+          ? {}
+          : {
+              loadshare: {
+                cluster: { assignedOperators: { has: user?.id } },
+              },
+            }),
+      },
       orderBy: { rechargeDate: "desc" },
-      include: { customer: true },
+      include: { loadshare: { include: { cluster: true } } },
+      ...(opts?.limit ? { take: opts.limit } : {}),
     });
+
+    return recharges;
   }
 
-  async findByCustomer(customerId: string) {
-    return this.prisma.recharge.findMany({
-      where: { customerId },
-      orderBy: { rechargeDate: "desc" },
-      include: { customer: true },
-    });
-  }
-
-  async update(id: string, data: UpdateRechargeDto) {
+  async update(id: string, data: UpdateRechargeDto, user: any) {
     const existing = await this.prisma.recharge.findUnique({
       where: { id },
-      include: { customer: true },
+      include: { loadshare: { include: { cluster: true } } },
     });
     if (!existing) throw new NotFoundException("Recharge not found");
+
+    const isAdmin = (user?.role || "").toLowerCase() === "admin";
+    if (!isAdmin && existing.loadshare && !existing.loadshare.cluster.assignedOperators.includes(user?.id)) {
+      throw new ForbiddenException("You are not assigned to this cluster");
+    }
 
     const rechargeDate = data.rechargeDate
       ? new Date(data.rechargeDate)
@@ -96,38 +114,32 @@ export class RechargesService {
     const updated = await this.prisma.recharge.update({
       where: { id },
       data: { ...data, rechargeDate, expiryDate },
-      include: { customer: true },
+      include: { loadshare: { include: { cluster: true } } },
     });
 
-    await this.prisma.customer.update({
-      where: { id: updated.customerId },
-      data: {
-        planType: data.planType ?? updated.customer.planType,
-        lastRechargeDate: rechargeDate,
-        expiryDate,
-        connectionStatus: "Active",
-      },
-    });
+    if (updated.loadshareId) {
+      await this.prisma.loadShare.update({
+        where: { id: updated.loadshareId },
+        data: { expiryDate },
+      });
+    }
 
     return updated;
   }
 
-  async remove(id: string) {
+  async remove(id: string, user: any) {
     const existing = await this.prisma.recharge.findUnique({
       where: { id },
-      include: { customer: true },
+      include: { loadshare: { include: { cluster: true } } },
     });
     if (!existing) throw new NotFoundException("Recharge not found");
 
-    await this.prisma.recharge.delete({ where: { id } });
+    const isAdmin = (user?.role || "").toLowerCase() === "admin";
+    if (!isAdmin && existing.loadshare && !existing.loadshare.cluster.assignedOperators.includes(user?.id)) {
+      throw new ForbiddenException("You are not assigned to this cluster");
+    }
 
-    await this.prisma.customer.update({
-      where: { id: existing.customerId },
-      data: {
-        totalRecharges: { decrement: 1 },
-        totalSpent: { decrement: existing.amount },
-      },
-    });
+    await this.prisma.recharge.delete({ where: { id } });
 
     return { message: "Recharge deleted successfully" };
   }

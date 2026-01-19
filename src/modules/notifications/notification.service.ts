@@ -120,25 +120,36 @@ export class NotificationService {
 
     const recharges = await this.prisma.recharge.findMany({
       where: { expiryDate: { lte: weekAhead } },
-      include: { customer: true },
+      include: { loadshare: { include: { cluster: true } } },
     });
 
     let created = 0;
     for (const r of recharges) {
-      if (isBefore(r.expiryDate, now)) {
+      const expired = isBefore(r.expiryDate, now);
+      const type = expired ? "Recharge Expired" : "Recharge Expiry Soon";
+      // Skip if a notification for this recharge and type already exists
+      const exists = await this.prisma.notification.findFirst({
+        where: { rechargeId: r.id, type },
+      });
+      if (exists) continue;
+
+      const clusterName = r.loadshare?.cluster?.name || "Unknown Cluster";
+      const location = r.loadshare?.nameOfLocation || "Unknown Location";
+
+      if (expired) {
         await this.createNotification(
-          "Recharge Expired",
-          `Recharge for ${
-            r.customer.fullName
-          } expired on ${r.expiryDate.toDateString()}.`
+          type,
+          `Recharge for ${clusterName} (${location}) expired on ${r.expiryDate.toDateString()}.`,
+          undefined,
+          r.id
         );
         created++;
-      } else if (isAfter(r.expiryDate, now)) {
+      } else {
         await this.createNotification(
-          "Recharge Expiry Soon",
-          `Recharge for ${
-            r.customer.fullName
-          } will expire on ${r.expiryDate.toDateString()}.`
+          type,
+          `Recharge for ${clusterName} (${location}) will expire on ${r.expiryDate.toDateString()}.`,
+          undefined,
+          r.id
         );
         created++;
       }

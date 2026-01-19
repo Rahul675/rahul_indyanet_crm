@@ -7,6 +7,7 @@ import { NotificationModule } from "../notifications/notifications.module";
 import { AuthService } from "./auth.service";
 import { AuthController } from "./auth.controller";
 import { JwtStrategy } from "./jwt.strategy";
+import { ConfigModule, ConfigService } from "@nestjs/config";
 
 @Module({
   imports: [
@@ -14,9 +15,20 @@ import { JwtStrategy } from "./jwt.strategy";
     AuditModule,
     NotificationModule,
     PassportModule.register({ defaultStrategy: "jwt" }),
-    JwtModule.register({
-      secret: process.env.JWT_SECRET || "supersecretkey", // ⚠️ store securely in .env
-      signOptions: { expiresIn: "1d" }, // 24 hours
+    JwtModule.registerAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => {
+        const secret = config.getOrThrow<string>("JWT_SECRET");
+        const expiresIn = (config.get<string>("JWT_EXPIRES_IN") ?? "7d") as any; // satisfy Jwt typings
+
+        return {
+          secret,
+          signOptions: {
+            expiresIn,
+          },
+        };
+      },
     }),
   ],
   providers: [AuthService, JwtStrategy],
