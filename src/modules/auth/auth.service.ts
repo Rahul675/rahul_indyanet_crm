@@ -9,6 +9,7 @@ import { NotificationService } from "../notifications/notification.service";
 import { JwtService } from "@nestjs/jwt";
 import * as bcrypt from "bcrypt";
 import { ChangePasswordDto } from "./dto/change-password.dto";
+import { MailerService } from "../../mailers/mailer.services";
 
 @Injectable()
 export class AuthService {
@@ -16,7 +17,8 @@ export class AuthService {
     private prisma: PrismaService,
     private audit: AuditService,
     private notifications: NotificationService,
-    private jwtService: JwtService
+    private jwtService: JwtService,
+    private mailer: MailerService
   ) {}
 
   async register(
@@ -237,6 +239,22 @@ export class AuthService {
       `Your password was successfully changed on ${new Date().toLocaleString()}`,
       userId
     );
+
+    // Send email notification (only for operators)
+    if (user.role === "operator") {
+      const subject = "Your password has been changed";
+      const html = `
+        <div style="font-family: Arial, sans-serif; line-height:1.6;">
+          <h2 style="margin:0 0 8px;">Password Change Confirmation</h2>
+          <p>Hello ${user.name},</p>
+          <p>This is to confirm that your password was changed on <strong>${new Date().toLocaleString()}</strong>.</p>
+          <p>If you did not perform this change, please contact your administrator immediately.</p>
+          <hr style="border:none;border-top:1px solid #eee;margin:16px 0;"/>
+          <p style="color:#666; font-size:12px;">This is an automated message from Indyanet CRM.</p>
+        </div>
+      `;
+      await this.mailer.send(user.email, subject, html);
+    }
 
     return {
       success: true,
