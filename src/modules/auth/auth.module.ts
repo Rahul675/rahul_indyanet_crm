@@ -4,6 +4,7 @@ import { PassportModule } from "@nestjs/passport";
 import { PrismaModule } from "../../prisma/prisma.module";
 import { AuditModule } from "../audit/audit.module";
 import { NotificationModule } from "../notifications/notifications.module";
+import { MailerModule } from "../../mailers/mailer.modules";
 import { AuthService } from "./auth.service";
 import { AuthController } from "./auth.controller";
 import { JwtStrategy } from "./jwt.strategy";
@@ -14,6 +15,7 @@ import { ConfigModule, ConfigService } from "@nestjs/config";
     PrismaModule,
     AuditModule,
     NotificationModule,
+    MailerModule,
     PassportModule.register({ defaultStrategy: "jwt" }),
     JwtModule.registerAsync({
       imports: [ConfigModule],
