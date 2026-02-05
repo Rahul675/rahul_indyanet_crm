@@ -43,8 +43,15 @@ export class CreateLoadShareDto {
   @ApiProperty() @IsInt() validity!: number;
   @ApiProperty() @IsString() paidBy!: string;
 
-  @ApiProperty() @IsDateString() activationDate!: string;
-  @ApiProperty() @IsDateString() expiryDate!: string;
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsDateString()
+  activationDate?: string;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsDateString()
+  expiryDate?: string;
 
   @ApiProperty() @IsNumber() installationCharges!: number;
   @ApiProperty() @IsNumber() internetCharges!: number;

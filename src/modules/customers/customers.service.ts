@@ -15,28 +15,18 @@ export class CustomersService {
 
   async create(data: CreateCustomerDto) {
     const parsedDate = new Date(data.installDate);
-    // Generate unique code with retry on unique violation
-    let customer;
-    for (let attempt = 0; attempt < 5; attempt++) {
-      const code = `CUST-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
-      try {
-        customer = await this.prisma.customer.create({
-          data: {
-            customerCode: code,
-            ...data,
-            installDate: parsedDate,
-          },
-        });
-        break;
-      } catch (e: any) {
-        // Prisma unique constraint violation code
-        if (e?.code === "P2002") {
-          continue; // retry
-        }
-        throw e;
-      }
-    }
-    if (!customer) throw new Error("Failed to generate unique customer code");
+    // Get the count of existing customers and generate incrementing code
+    const count = await this.prisma.customer.count();
+    const nextNumber = count + 1;
+    const code = `CUST-${String(nextNumber).padStart(4, "0")}`;
+    
+    const customer = await this.prisma.customer.create({
+      data: {
+        customerCode: code,
+        ...data,
+        installDate: parsedDate,
+      },
+    });
 
     // 🔔 Create notification
     await this.notifications.createNotification(
@@ -137,6 +127,9 @@ export class CustomersService {
     const imported: Promise<any>[] = [];
     const errors: { row: number; error: string }[] = [];
 
+    const currentCount = await this.prisma.customer.count();
+    let counter = currentCount;
+
     worksheet.eachRow((row, rowNumber) => {
       if (rowNumber === 1) return; // Skip header
 
@@ -154,8 +147,9 @@ export class CustomersService {
               : new Date(),
         };
 
-        // Generate customer code
-        const code = `CUST-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+        // Generate incrementing customer code
+        counter += 1;
+        const code = `CUST-${String(counter).padStart(4, "0")}`;
 
         imported.push(
           this.prisma.customer.create({
