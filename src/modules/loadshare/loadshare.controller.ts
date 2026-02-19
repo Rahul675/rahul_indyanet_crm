@@ -201,6 +201,10 @@ export class LoadShareController {
     @UploadedFile() file: Express.Multer.File,
     @Query("clusterId") clusterId: string
   ) {
+    console.log("\n🔍 ===== LOADSHARE IMPORT ENDPOINT CALLED =====");
+    console.log(`📝 ClusterId: ${clusterId}`);
+    console.log(`📄 File: ${file?.originalname}, Size: ${file?.size} bytes`);
+
     if (!file) throw new BadRequestException("No Excel file uploaded");
     if (!clusterId) {
       throw new BadRequestException("clusterId is required");
@@ -216,45 +220,79 @@ export class LoadShareController {
       if (!rawData.length)
         throw new BadRequestException("Excel file appears to be empty.");
 
+      console.log("📊 LoadShare import started");
+      console.log("📋 Total rows:", rawData.length);
+      console.log("📑 Column headers:", Object.keys(rawData[0] || {}));
+      console.log("📝 First row sample:", JSON.stringify(rawData[0]));
+
+      // Helper function to find column value with flexible header matching
+      const getVal = (row: any, possibleKeys: string[]) => {
+        // Try exact matches first
+        for (const key of possibleKeys) {
+          if (row[key] !== undefined && row[key] !== null && row[key] !== "") 
+            return row[key];
+        }
+        // Try case-insensitive and space-insensitive match
+        const cleanedKeys = Object.keys(row);
+        for (const k of cleanedKeys) {
+          const standardK = k.replace(/[\n\r\s]/g, "").toUpperCase();
+          for (const p of possibleKeys) {
+            if (standardK === p.replace(/[\n\r\s]/g, "").toUpperCase())
+              return row[k];
+          }
+        }
+        return "";
+      };
+
       // Automatically attach clusterId to each record
       const normalizedData = rawData.map((row) => ({
-        clusterId, // ✅ Added automatically
-        rtNumber: row["RT number"]?.trim() || "",
-        nameOfLocation: row["Name of Location"] || "",
-        address: "-",
-        state: row["State"] || "",
-        circuitId: row["Circuit ID"] || "",
-        isp: row["ISP"] || "",
-        invoice: row["Invoice #"] || "",
-        speed: row["Speed"]?.toString() || "",
-        status: row["Status"] || "",
-        validity: Number(row["Validity"]) || 0,
-        paidBy: row["Paid by"] || "",
-        activationDate: row["Activation Date"] || "",
-        expiryDate: row["Expiry Date"] || "",
-        installationCharges: Number(row["Installation Charges"]) || 0,
-        internetCharges: Number(row["Internet charges"]) || 0,
-        gstPercent: Number(row["GST"]) || 0,
-        month: row["Month"] || "",
-        requestedBy: row["Requested By"] || "",
-        approvedFrom: row["Approved from"] || "",
-        wifiOrNumber: row["Wifi / Number"] || "",
-        hubSpocName: row["Hub SPOC name"] || "",
-        hubSpocNumber: row["Hub SPOC number"] || "",
+        clusterId,
+        rtNumber: String(getVal(row, ["RT number", "rtNumber", "RT_Number", "rt_number", "Rt Number"]))
+          .trim()
+          .replace(/\s+/g, "-")  // Replace spaces with hyphens
+          .toUpperCase() || "", // Normalize to uppercase
+        nameOfLocation: String(getVal(row, ["Name of Location", "nameOfLocation", "name_of_location", "Name"])).trim() || "",
+        address: String(getVal(row, ["address", "Address", "Destination", "destination"])).trim() || "-",
+        state: String(getVal(row, ["State", "state", "STATE"])).trim() || "",
+        circuitId: String(getVal(row, ["Circuit ID", "circuitId", "circuit_id", "CircuitID"])).trim() || "",
+        isp: String(getVal(row, ["ISP", "isp", "ISP name", "ispName"])).trim() || "",
+        invoice: String(getVal(row, ["Invoice #", "invoice", "invoiceNumber", "Invoice Number"])).trim() || "",
+        speed: String(getVal(row, ["Speed", "speed", "Speed Mbps"])).trim() || "",
+        status: String(getVal(row, ["Status", "status", "STATUS"])).trim() || "Active",
+        validity: Number(getVal(row, ["Validity", "validity", "VALIDITY"])) || 0,
+        paidBy: String(getVal(row, ["Paid by", "paidBy", "paid_by", "Paid By"])).trim() || "",
+        activationDate: getVal(row, ["Activation Date", "activationDate", "activation_date", "Activation date"]) || "",
+        expiryDate: getVal(row, ["Expiry Date", "expiryDate", "expiry_date", "Expiry date"]) || "",
+        installationCharges: Number(getVal(row, ["Installation Charges", "installationCharges", "installation_charges"])) || 0,
+        internetCharges: Number(getVal(row, ["Internet charges", "internetCharges", "internet_charges", "Internet Charges"])) || 0,
+        gstPercent: Number(getVal(row, ["GST", "gstPercent", "gst_percent", "GST %"])) || 0,
+        month: String(getVal(row, ["Month", "month", "MONTH"])).trim() || "",
+        requestedBy: String(getVal(row, ["Requested By", "requestedBy", "requested_by"])).trim() || "",
+        approvedFrom: String(getVal(row, ["Approved from", "approvedFrom", "approved_from"])).trim() || "",
+        wifiOrNumber: String(getVal(row, ["Wifi / Number", "wifiOrNumber", "wifi_or_number"])).trim() || "",
+        hubSpocName: String(getVal(row, ["Hub SPOC name", "hubSpocName", "hub_spoc_name"])).trim() || "",
+        hubSpocNumber: String(getVal(row, ["Hub SPOC number", "hubSpocNumber", "hub_spoc_number"])).trim() || "",
       }));
 
+      console.log("📌 Normalized first record:", JSON.stringify(normalizedData[0]));
+
       const result = await this.service.bulkImport(normalizedData);
+
+      console.log(`✅ Import complete - Imported: ${result.imported}, Skipped: ${result.skipped}`);
+      console.log("✅ ===== LOADSHARE IMPORT ENDPOINT COMPLETED =====\n");
 
       return {
         success: true,
         message: result.message,
-        imported: result.importedCount,
-        skipped: result.skippedCount || 0,
-        duplicates: result.duplicateRtNumbers,
+        imported: result.imported,
+        skipped: result.skipped,
+        duplicateRtNumbers: result.duplicateRtNumbers,
+        existingRtNumbers: result.existingRtNumbers,
         records: result.data,
       };
     } catch (err: any) {
-      console.error("❌ Excel import failed:", err);
+      console.error("❌ Excel import failed:", err.message);
+      console.error("Stack:", err.stack);
       throw new BadRequestException(
         err?.message ?? "Failed to import Excel file"
       );

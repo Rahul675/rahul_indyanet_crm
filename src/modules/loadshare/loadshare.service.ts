@@ -408,34 +408,85 @@ export class LoadShareService {
       throw new BadRequestException("No data provided for import");
     }
 
+    console.log("\n📊 ===== BULK IMPORT STARTED =====");
+    console.log(`📋 Total records to process: ${data.length}`);
+    console.log("🔍 Inspecting first record:", JSON.stringify(data[0]));
+
     const seen = new Set<string>();
     const duplicateRtNumbers: string[] = [];
     const existingRtNumbers: string[] = [];
+    const otherErrors: string[] = [];
     let importedCount = 0;
 
+    // Helper function to normalize RT number format for comparison
+    const normalizeRtNumber = (rt: string) => {
+      return rt.trim().replace(/\s+/g, "-").toUpperCase();
+    };
+
     const results = await Promise.all(
-      data.map(async (entry) => {
-        const rt = entry.rtNumber?.trim();
-        if (!rt || !entry.clusterId) return null;
+      data.map(async (entry, idx) => {
+        const rt = normalizeRtNumber(entry.rtNumber?.trim() || "");
+        
+        if (!rt) {
+          console.log(`⏭️  Row ${idx} skipped - Missing RT number. Entry:`, entry);
+          otherErrors.push(`Row ${idx}: Missing RT number`);
+          return null;
+        }
+
+        if (!entry.clusterId) {
+          console.log(`⏭️  Row ${idx} skipped - Missing clusterId. RT: ${rt}`);
+          otherErrors.push(`Row ${idx}: Missing clusterId`);
+          return null;
+        }
 
         // Check for duplicates within the import batch
         if (seen.has(rt)) {
+          console.log(`🔁 Row ${idx} - Duplicate RT in batch: ${rt}`);
           duplicateRtNumbers.push(rt);
           return null;
         }
         seen.add(rt);
 
-        await this.validateCluster(entry.clusterId);
-
-        // Check if RT number already exists in database
-        const existingRecord = await this.prisma.loadShare.findUnique({
-          where: { rtNumber: rt },
-        });
-
-        // If RT number already exists, skip it
-        if (existingRecord) {
-          existingRtNumbers.push(rt);
+        try {
+          await this.validateCluster(entry.clusterId);
+        } catch (err) {
+          console.log(`❌ Row ${idx} - Invalid cluster: ${entry.clusterId}`);
+          otherErrors.push(`Row ${idx}: Invalid cluster`);
           return null;
+        }
+
+        // Check if RT number already exists in database (flexible format matching)
+        try {
+          // First try exact match with normalized format
+          const existingRecord = await this.prisma.loadShare.findUnique({
+            where: { rtNumber: rt },
+          });
+
+          if (existingRecord) {
+            console.log(`📌 Row ${idx} - RT already exists (exact): ${rt}`);
+            existingRtNumbers.push(rt);
+            return null;
+          }
+
+          // If not found, try case-insensitive and space/hyphen flexible search
+          const allRts = await this.prisma.loadShare.findMany({
+            where: { clusterId: entry.clusterId },
+            select: { rtNumber: true },
+          });
+
+          const rtNormalized = rt.toLowerCase().replace(/[\s\-]/g, "");
+          const isDuplicate = allRts.some(
+            (rec) =>
+              rec.rtNumber.toLowerCase().replace(/[\s\-]/g, "") === rtNormalized
+          );
+
+          if (isDuplicate) {
+            console.log(`📌 Row ${idx} - RT already exists (flexible match): ${rt}`);
+            existingRtNumbers.push(rt);
+            return null;
+          }
+        } catch (err: any) {
+          console.log(`⚠️  Row ${idx} - Error checking existing RT: ${err.message}`);
         }
 
         const { gstAmount, totalPayable } = this.calculateAmounts(
@@ -494,35 +545,52 @@ export class LoadShareService {
           gstPercent: Number(entry.gstPercent) || 0,
         };
 
-        const record = await this.prisma.loadShare.create({
-          data: {
-            ...cleanEntry,
-            activationDate,
-            expiryDate,
-            gstAmount,
-            totalPayable,
-          },
-        });
+        try {
+          const record = await this.prisma.loadShare.create({
+            data: {
+              ...cleanEntry,
+              activationDate,
+              expiryDate,
+              gstAmount,
+              totalPayable,
+            },
+          });
 
-        importedCount++;
-        return record;
+          console.log(`✅ Row ${idx} - Created: ${rt}`);
+          importedCount++;
+          return record;
+        } catch (err: any) {
+          console.log(`❌ Row ${idx} - Failed to create: ${rt}`, err);
+          otherErrors.push(`Row ${idx}: Failed to create (${err?.message || 'Unknown error'})`);
+          return null;
+        }
       })
     );
 
-    const totalSkipped = duplicateRtNumbers.length + existingRtNumbers.length;
+    const totalSkipped = duplicateRtNumbers.length + existingRtNumbers.length + otherErrors.length;
     const messages: string[] = [];
     
-    if (importedCount > 0) messages.push(`${importedCount} new record(s) imported`);
-    if (duplicateRtNumbers.length > 0) messages.push(`${duplicateRtNumbers.length} duplicate RT number(s) in file were skipped`);
-    if (existingRtNumbers.length > 0) messages.push(`${existingRtNumbers.length} RT number(s) already exist and were skipped`);
+    if (importedCount > 0) messages.push(`✅ ${importedCount} new record(s) imported`);
+    if (duplicateRtNumbers.length > 0) messages.push(`🔁 ${duplicateRtNumbers.length} duplicate RT number(s) in file skipped`);
+    if (existingRtNumbers.length > 0) messages.push(`📌 ${existingRtNumbers.length} RT number(s) already exist`);
+    if (otherErrors.length > 0) messages.push(`⏭️  ${otherErrors.length} rows skipped (invalid or missing data)`);
+
+    console.log(`\n📊 ===== IMPORT COMPLETED =====`);
+    console.log(`✅ Imported: ${importedCount}`);
+    console.log(`📌 Existing: ${existingRtNumbers.length}`);
+    console.log(`🔁 Duplicates: ${duplicateRtNumbers.length}`);
+    console.log(`⏭️  Other errors: ${otherErrors.length}`);
+    console.log(`Total skipped: ${totalSkipped}`);
+    console.log(`Message: ${messages.join(' | ')}`);
+    console.log(`================================\n`);
 
     return {
       success: true,
-      importedCount,
-      skippedCount: totalSkipped,
-      duplicateRtNumbers: duplicateRtNumbers.length > 0 ? duplicateRtNumbers : undefined,
-      existingRtNumbers: existingRtNumbers.length > 0 ? existingRtNumbers : undefined,
-      message: messages.join('. '),
+      imported: importedCount,
+      skipped: totalSkipped,
+      duplicateRtNumbers: duplicateRtNumbers.length > 0 ? duplicateRtNumbers : [],
+      existingRtNumbers: existingRtNumbers.length > 0 ? existingRtNumbers : [],
+      message: messages.join(' | ') || "No records were imported",
       data: results.filter(Boolean),
     };
   }

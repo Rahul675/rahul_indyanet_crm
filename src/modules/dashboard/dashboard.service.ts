@@ -64,6 +64,62 @@ export class DashboardService {
     return { activeCRMUsers: activeUsers };
   }
 
+  // 🟢 Total Issues (Open & Resolved)
+  async getIssuesMetrics() {
+    const total = await this.prisma.issue.count();
+    const open = await this.prisma.issue.count({
+      where: { status: "Open" },
+    });
+    const resolved = await this.prisma.issue.count({
+      where: { status: "Resolved" },
+    });
+    return { totalIssues: total, openIssues: open, resolvedIssues: resolved };
+  }
+
+  // 🟢 Monthly Revenue (this month)
+  async getMonthlyRevenue() {
+    const start = startOfMonth(new Date());
+    const recharges = await this.prisma.recharge.aggregate({
+      where: { rechargeDate: { gte: start } },
+      _sum: { amount: true },
+    });
+    return { monthlyRevenue: recharges._sum.amount || 0 };
+  }
+
+  // 🟢 Top Cluster by loadshares
+  async getTopCluster() {
+    const topCluster = await this.prisma.loadShare.groupBy({
+      by: ["clusterId"],
+      _count: { id: true },
+      orderBy: { _count: { id: "desc" } },
+      take: 1,
+    });
+
+    if (topCluster.length === 0) {
+      return { topCluster: "N/A", topClusterCount: 0 };
+    }
+
+    const cluster = await this.prisma.cluster.findUnique({
+      where: { id: topCluster[0].clusterId },
+      select: { name: true },
+    });
+
+    return {
+      topCluster: cluster?.name || "Unknown",
+      topClusterCount: topCluster[0]._count.id,
+    };
+  }
+
+  // 🟢 Issue Resolution Efficiency
+  async getResolutionRate() {
+    const total = await this.prisma.issue.count();
+    const resolved = await this.prisma.issue.count({
+      where: { status: "Resolved" },
+    });
+    const rate = total === 0 ? 0 : Math.round((resolved / total) * 100);
+    return { issueResolutionRate: rate };
+  }
+
   // 🟢 Combine all metrics into one summary
   async getDashboardSummary() {
     const [
@@ -73,6 +129,10 @@ export class DashboardService {
       suspensions,
       deactivations,
       activeCRM,
+      issues,
+      revenue,
+      topCluster,
+      resolutionRate,
     ] = await Promise.all([
       this.getCustomerStats(),
       this.getRenewals(),
@@ -80,6 +140,10 @@ export class DashboardService {
       this.getSuspensions(),
       this.getDeactivations(),
       this.getActiveCRMUsers(),
+      this.getIssuesMetrics(),
+      this.getMonthlyRevenue(),
+      this.getTopCluster(),
+      this.getResolutionRate(),
     ]);
 
     return {
@@ -92,6 +156,10 @@ export class DashboardService {
         ...suspensions,
         ...deactivations,
         ...activeCRM,
+        ...issues,
+        ...revenue,
+        ...topCluster,
+        ...resolutionRate,
       },
     };
   }
