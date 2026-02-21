@@ -22,7 +22,7 @@ export class PrismaService
     const dbUrl = process.env.DATABASE_URL;
 
     if (!dbUrl) {
-      console.error("❌ DATABASE_URL not found in .env file!");
+      // console.error("❌ DATABASE_URL not found in .env file!");
       throw new Error("DATABASE_URL is missing");
     }
 

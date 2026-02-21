@@ -20,7 +20,6 @@ model Customer {
   totalSpent       Float    @default(0)
   additionalInfo   Json     @default("{}")
   paymentMode      String?
-  issues           Issue[]  @relation("CustomerIssues")
 
   @@index([connectionStatus])
   @@index([installDate])
@@ -36,6 +35,7 @@ model Cluster {
   assignedOperators String[]    @default([])
   loadshares        LoadShare[]
   recharges         Recharge[]
+  issues            Issue[]
 
   @@map("clusters")
 }
@@ -49,11 +49,14 @@ model Issue {
   createdDate     DateTime  @default(now())
   resolvedDate    DateTime?
   resolutionNotes String?
-  customerId      String
+  clusterId       String?
+  loadshareId     String?
   updatedAt       DateTime  @updatedAt
-  customer        Customer  @relation("CustomerIssues", fields: [customerId], references: [id], onDelete: Cascade)
+  cluster         Cluster?  @relation(fields: [clusterId], references: [id], onDelete: SetNull)
+  loadshare       LoadShare?  @relation(fields: [loadshareId], references: [id], onDelete: SetNull)
 
-  @@index([customerId])
+  @@index([clusterId])
+  @@index([loadshareId])
   @@index([status])
   @@map("issues")
 }
@@ -114,6 +117,7 @@ model LoadShare {
   clusterId           String
   cluster             Cluster    @relation(fields: [clusterId], references: [id], onDelete: Cascade)
   recharges           Recharge[]
+  issues              Issue[]
 
   @@index([nameOfLocation])
   @@index([clusterId])

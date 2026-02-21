@@ -287,7 +287,7 @@ export class OtherClientsService {
 
       return { success: true, imported: createdCount, updated: updatedCount };
     } catch (error) {
-      console.error("FULL PRISMA ERROR:", error);
+      // console.error("FULL PRISMA ERROR:", error);
       if (error instanceof Error) {
         throw new BadRequestException(`Import failed: ${error.message}`);
       }

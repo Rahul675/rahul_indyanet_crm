@@ -35,6 +35,16 @@ export class ReportsController {
     };
   }
 
+  // 📈 Customer growth
+  @Get("growth")
+  async getCustomerGrowth() {
+    return {
+      success: true,
+      timestamp: new Date(),
+      data: await this.reportsService.getCustomerGrowth(),
+    };
+  }
+
   // 💰 Revenue Report
   @Get("revenue")
   async getRevenue(@Query("range") range: "day" | "week" | "month" = "month") {

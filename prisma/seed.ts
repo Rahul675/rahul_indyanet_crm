@@ -47,12 +47,12 @@
 //     })
 //   }
 
-//   console.log('Seed users created successfully.')
+ //  console.log('Seed users created successfully.')
 // }
 
 // main()
 //   .catch(e => {
-//     console.error(e)
+ //   console.error(e)
 //     process.exit(1)
 //   })
 //   .finally(async () => {

@@ -68,7 +68,7 @@ export class DashboardService {
   async getIssuesMetrics() {
     const total = await this.prisma.issue.count();
     const open = await this.prisma.issue.count({
-      where: { status: "Open" },
+      where: { status: { in: ["Pending", "Open"] } },
     });
     const resolved = await this.prisma.issue.count({
       where: { status: "Resolved" },

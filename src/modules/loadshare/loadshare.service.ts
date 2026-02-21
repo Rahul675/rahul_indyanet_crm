@@ -408,9 +408,9 @@ export class LoadShareService {
       throw new BadRequestException("No data provided for import");
     }
 
-    console.log("\n📊 ===== BULK IMPORT STARTED =====");
-    console.log(`📋 Total records to process: ${data.length}`);
-    console.log("🔍 Inspecting first record:", JSON.stringify(data[0]));
+    // console.log("\n📊 ===== BULK IMPORT STARTED =====");
+    // console.log(`📋 Total records to process: ${data.length}`);
+    // console.log("🔍 Inspecting first record:", JSON.stringify(data[0]));
 
     const seen = new Set<string>();
     const duplicateRtNumbers: string[] = [];
@@ -428,20 +428,20 @@ export class LoadShareService {
         const rt = normalizeRtNumber(entry.rtNumber?.trim() || "");
         
         if (!rt) {
-          console.log(`⏭️  Row ${idx} skipped - Missing RT number. Entry:`, entry);
+            // console.log(`⏭️  Row ${idx} skipped - Missing RT number. Entry:`, entry);
           otherErrors.push(`Row ${idx}: Missing RT number`);
           return null;
         }
 
         if (!entry.clusterId) {
-          console.log(`⏭️  Row ${idx} skipped - Missing clusterId. RT: ${rt}`);
+          // console.log(`⏭️  Row ${idx} skipped - Missing clusterId. RT: ${rt}`);
           otherErrors.push(`Row ${idx}: Missing clusterId`);
           return null;
         }
 
         // Check for duplicates within the import batch
         if (seen.has(rt)) {
-          console.log(`🔁 Row ${idx} - Duplicate RT in batch: ${rt}`);
+          // console.log(`🔁 Row ${idx} - Duplicate RT in batch: ${rt}`);
           duplicateRtNumbers.push(rt);
           return null;
         }
@@ -450,7 +450,7 @@ export class LoadShareService {
         try {
           await this.validateCluster(entry.clusterId);
         } catch (err) {
-          console.log(`❌ Row ${idx} - Invalid cluster: ${entry.clusterId}`);
+          // console.log(`❌ Row ${idx} - Invalid cluster: ${entry.clusterId}`);
           otherErrors.push(`Row ${idx}: Invalid cluster`);
           return null;
         }
@@ -463,7 +463,7 @@ export class LoadShareService {
           });
 
           if (existingRecord) {
-            console.log(`📌 Row ${idx} - RT already exists (exact): ${rt}`);
+          //  console.log(`📌 Row ${idx} - RT already exists (exact): ${rt}`);
             existingRtNumbers.push(rt);
             return null;
           }
@@ -481,12 +481,12 @@ export class LoadShareService {
           );
 
           if (isDuplicate) {
-            console.log(`📌 Row ${idx} - RT already exists (flexible match): ${rt}`);
+            // console.log(`📌 Row ${idx} - RT already exists (flexible match): ${rt}`);
             existingRtNumbers.push(rt);
             return null;
           }
         } catch (err: any) {
-          console.log(`⚠️  Row ${idx} - Error checking existing RT: ${err.message}`);
+          // console.log(`⚠️  Row ${idx} - Error checking existing RT: ${err.message}`);
         }
 
         const { gstAmount, totalPayable } = this.calculateAmounts(
@@ -556,11 +556,11 @@ export class LoadShareService {
             },
           });
 
-          console.log(`✅ Row ${idx} - Created: ${rt}`);
+          // console.log(`✅ Row ${idx} - Created: ${rt}`);
           importedCount++;
           return record;
         } catch (err: any) {
-          console.log(`❌ Row ${idx} - Failed to create: ${rt}`, err);
+          // console.log(`❌ Row ${idx} - Failed to create: ${rt}`, err);
           otherErrors.push(`Row ${idx}: Failed to create (${err?.message || 'Unknown error'})`);
           return null;
         }
@@ -575,14 +575,14 @@ export class LoadShareService {
     if (existingRtNumbers.length > 0) messages.push(`📌 ${existingRtNumbers.length} RT number(s) already exist`);
     if (otherErrors.length > 0) messages.push(`⏭️  ${otherErrors.length} rows skipped (invalid or missing data)`);
 
-    console.log(`\n📊 ===== IMPORT COMPLETED =====`);
-    console.log(`✅ Imported: ${importedCount}`);
-    console.log(`📌 Existing: ${existingRtNumbers.length}`);
-    console.log(`🔁 Duplicates: ${duplicateRtNumbers.length}`);
-    console.log(`⏭️  Other errors: ${otherErrors.length}`);
-    console.log(`Total skipped: ${totalSkipped}`);
-    console.log(`Message: ${messages.join(' | ')}`);
-    console.log(`================================\n`);
+    // console.log(`\n📊 ===== IMPORT COMPLETED =====`);
+    // console.log(`✅ Imported: ${importedCount}`);
+    // console.log(`📌 Existing: ${existingRtNumbers.length}`);
+    // console.log(`🔁 Duplicates: ${duplicateRtNumbers.length}`);
+    // console.log(`⏭️  Other errors: ${otherErrors.length}`);
+    // console.log(`Total skipped: ${totalSkipped}`);
+    // console.log(`Message: ${messages.join(' | ')}`);
+    // console.log(`================================\n`);
 
     return {
       success: true,

@@ -201,9 +201,9 @@ export class LoadShareController {
     @UploadedFile() file: Express.Multer.File,
     @Query("clusterId") clusterId: string
   ) {
-    console.log("\n🔍 ===== LOADSHARE IMPORT ENDPOINT CALLED =====");
-    console.log(`📝 ClusterId: ${clusterId}`);
-    console.log(`📄 File: ${file?.originalname}, Size: ${file?.size} bytes`);
+    // console.log("\n🔍 ===== LOADSHARE IMPORT ENDPOINT CALLED =====");
+    // console.log(`📝 ClusterId: ${clusterId}`);
+    // console.log(`📄 File: ${file?.originalname}, Size: ${file?.size} bytes`);
 
     if (!file) throw new BadRequestException("No Excel file uploaded");
     if (!clusterId) {
@@ -220,10 +220,10 @@ export class LoadShareController {
       if (!rawData.length)
         throw new BadRequestException("Excel file appears to be empty.");
 
-      console.log("📊 LoadShare import started");
-      console.log("📋 Total rows:", rawData.length);
-      console.log("📑 Column headers:", Object.keys(rawData[0] || {}));
-      console.log("📝 First row sample:", JSON.stringify(rawData[0]));
+      // console.log("📊 LoadShare import started");
+      // console.log("📋 Total rows:", rawData.length);
+      // console.log("📑 Column headers:", Object.keys(rawData[0] || {}));
+      // console.log("📝 First row sample:", JSON.stringify(rawData[0]));
 
       // Helper function to find column value with flexible header matching
       const getVal = (row: any, possibleKeys: string[]) => {
@@ -274,12 +274,12 @@ export class LoadShareController {
         hubSpocNumber: String(getVal(row, ["Hub SPOC number", "hubSpocNumber", "hub_spoc_number"])).trim() || "",
       }));
 
-      console.log("📌 Normalized first record:", JSON.stringify(normalizedData[0]));
+      // console.log("📌 Normalized first record:", JSON.stringify(normalizedData[0]));
 
       const result = await this.service.bulkImport(normalizedData);
 
-      console.log(`✅ Import complete - Imported: ${result.imported}, Skipped: ${result.skipped}`);
-      console.log("✅ ===== LOADSHARE IMPORT ENDPOINT COMPLETED =====\n");
+      // console.log(`✅ Import complete - Imported: ${result.imported}, Skipped: ${result.skipped}`);
+      // console.log("✅ ===== LOADSHARE IMPORT ENDPOINT COMPLETED =====\n");
 
       return {
         success: true,
@@ -291,8 +291,8 @@ export class LoadShareController {
         records: result.data,
       };
     } catch (err: any) {
-      console.error("❌ Excel import failed:", err.message);
-      console.error("Stack:", err.stack);
+      // console.error("❌ Excel import failed:", err.message);
+      // console.error("Stack:", err.stack);
       throw new BadRequestException(
         err?.message ?? "Failed to import Excel file"
       );

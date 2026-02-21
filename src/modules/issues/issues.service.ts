@@ -17,19 +17,35 @@ export class IssuesService {
     data: CreateIssueDto,
     user: { id: string; name: string; role: string }
   ) {
-    const customer = await this.prisma.customer.findUnique({
-      where: { id: data.customerId },
-    });
+    // Validate cluster if provided
+    if (data.clusterId) {
+      const cluster = await this.prisma.cluster.findUnique({
+        where: { id: data.clusterId },
+      });
+      if (!cluster) {
+        throw new NotFoundException(`Cluster with ID ${data.clusterId} not found`);
+      }
+    }
 
-    if (!customer) {
-      throw new NotFoundException(
-        `Customer with ID ${data.customerId} not found`
-      );
+    // Validate loadshare if provided
+    if (data.loadshareId) {
+      const loadshare = await this.prisma.loadShare.findUnique({
+        where: { id: data.loadshareId },
+      });
+      if (!loadshare) {
+        throw new NotFoundException(`Location with ID ${data.loadshareId} not found`);
+      }
     }
 
     const issue = await this.prisma.issue.create({
-      data: { ...data, createdDate: new Date() },
-      include: { customer: true },
+      data: { 
+        ...data, 
+        createdDate: new Date() 
+      },
+      include: { 
+        cluster: true,
+        loadshare: true
+      },
     });
 
     // 🔹 Issue log using same audit table
@@ -37,38 +53,47 @@ export class IssuesService {
       user.id,
       "ISSUE_CREATE",
       "ISSUE",
-      `Issue created for ${customer.fullName} (ID: ${customer.id}) by ${user.name} (${user.role})`
+      `Issue created at Cluster/Location by ${user.name} (${user.role})`
     );
 
     // 🔹 Notification
     await this.notifications.createNotification(
       "New Issue Created",
-      `A new issue was raised for customer ${customer.fullName}`,
+      `A new issue was raised`,
       user.id
     );
 
     return issue;
   }
 
-  async findAll() {
+  async findAll(clusterId?: string, loadshareId?: string) {
+    const where: any = {};
+    
+    if (clusterId) {
+      where.clusterId = clusterId;
+    }
+    
+    if (loadshareId) {
+      where.loadshareId = loadshareId;
+    }
+    
     return this.prisma.issue.findMany({
+      where,
       orderBy: { createdDate: "desc" },
-      include: { customer: true },
-    });
-  }
-
-  async findByCustomer(customerId: string) {
-    return this.prisma.issue.findMany({
-      where: { customerId },
-      orderBy: { createdDate: "desc" },
-      include: { customer: true },
+      include: { 
+        cluster: true,
+        loadshare: true
+      },
     });
   }
 
   async findOne(id: string) {
     const issue = await this.prisma.issue.findUnique({
       where: { id },
-      include: { customer: true },
+      include: { 
+        cluster: true,
+        loadshare: true
+      },
     });
 
     if (!issue) throw new NotFoundException(`Issue with ID ${id} not found`);
@@ -86,7 +111,10 @@ export class IssuesService {
     const updated = await this.prisma.issue.update({
       where: { id },
       data: { ...data, updatedAt: new Date() },
-      include: { customer: true },
+      include: { 
+        cluster: true,
+        loadshare: true
+      },
     });
 
     await this.audit.logAction(
@@ -113,5 +141,78 @@ export class IssuesService {
     );
 
     return deleted;
+  }
+
+  // 🔹 Get all clusters for the current user
+  async getClusters(user: any) {
+    const isAdmin = user?.role?.toLowerCase() === "admin" || user?.role === "admin";
+    
+    // Admin sees all clusters, others see only assigned clusters
+    const clusters = await this.prisma.cluster.findMany({
+      where: isAdmin ? {} : { assignedOperators: { has: user?.id || "" } },
+      select: {
+        id: true,
+        name: true,
+        status: true,
+        createdAt: true,
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    // console.log(`[Issues Service] getClusters - User: ${user?.email}, Role: ${user?.role}, IsAdmin: ${isAdmin}, Found: ${clusters.length}`);
+    return clusters;
+  }
+
+  // 🔹 Get locations (loadshares) by cluster
+  async getLocationsByCluster(clusterId: string) {
+    const cluster = await this.prisma.cluster.findUnique({
+      where: { id: clusterId },
+    });
+
+    if (!cluster) {
+      throw new NotFoundException(`Cluster with ID ${clusterId} not found`);
+    }
+
+    return this.prisma.loadShare.findMany({
+      where: { clusterId },
+      select: {
+        id: true,
+        nameOfLocation: true,
+        address: true,
+        state: true,
+        status: true,
+      },
+      orderBy: { createdAt: "desc" },
+    });
+  }
+
+  // 🔹 Get operators assigned to a cluster
+  async getOperatorsByCluster(clusterId: string) {
+    const cluster = await this.prisma.cluster.findUnique({
+      where: { id: clusterId },
+    });
+
+    if (!cluster) {
+      throw new NotFoundException(`Cluster with ID ${clusterId} not found`);
+    }
+
+    if (!cluster.assignedOperators || cluster.assignedOperators.length === 0) {
+      return [];
+    }
+
+    // Get user details for each operator ID
+    return this.prisma.user.findMany({
+      where: {
+        id: {
+          in: cluster.assignedOperators,
+        },
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+      },
+      orderBy: { name: "asc" },
+    });
   }
 }

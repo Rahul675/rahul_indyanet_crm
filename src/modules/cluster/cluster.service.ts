@@ -106,10 +106,10 @@ export class ClusterService {
       const sheet = workbook.Sheets[sheetName];
       const rawRows: any[] = XLSX.utils.sheet_to_json(sheet, { defval: "" });
 
-      console.log("📊 Excel import started");
-      console.log("📋 Total rows found:", rawRows.length);
-      console.log("📝 First few rows:", JSON.stringify(rawRows.slice(0, 3)));
-      console.log("📑 Column headers:", Object.keys(rawRows[0] || {}));
+      // console.log("📊 Excel import started");
+      // console.log("📋 Total rows found:", rawRows.length);
+      // console.log("📝 First few rows:", JSON.stringify(rawRows.slice(0, 3)));
+      // console.log("📑 Column headers:", Object.keys(rawRows[0] || {}));
 
       let createdCount = 0;
       let updatedCount = 0;
@@ -137,7 +137,7 @@ export class ClusterService {
         const nameVal = String(getVal(["Name", "NAME", "name", "cluster name", "Cluster Name"]) || "").trim();
         
         if (!nameVal) {
-          console.log("⏭️  Skipping row - no cluster name:", row);
+          // console.log("⏭️  Skipping row - no cluster name:", row);
           skippedCount++;
           continue;
         }
@@ -150,7 +150,7 @@ export class ClusterService {
           ? operatorsVal.split(",").map((op) => op.trim()).filter((op) => op !== "")
           : [];
 
-        console.log(`📌 Processing cluster: ${nameVal}, Status: ${statusVal}`);
+        // console.log(`📌 Processing cluster: ${nameVal}, Status: ${statusVal}`);
 
         // Check if cluster already exists
         const existing = await this.prisma.cluster.findFirst({
@@ -167,7 +167,7 @@ export class ClusterService {
               updatedAt: new Date(),
             },
           });
-          console.log(`✏️  Updated cluster: ${nameVal}`);
+          // console.log(`✏️  Updated cluster: ${nameVal}`);
           updatedCount++;
         } else {
           // Create new cluster
@@ -178,15 +178,15 @@ export class ClusterService {
               assignedOperators,
             },
           });
-          console.log(`✅ Created cluster: ${nameVal}`);
+          // console.log(`✅ Created cluster: ${nameVal}`);
           createdCount++;
         }
       }
 
-      console.log(`📊 Import complete - Created: ${createdCount}, Updated: ${updatedCount}, Skipped: ${skippedCount}`);
+      // console.log(`📊 Import complete - Created: ${createdCount}, Updated: ${updatedCount}, Skipped: ${skippedCount}`);
       return { success: true, imported: createdCount, updated: updatedCount, skipped: skippedCount };
     } catch (error) {
-      console.error("❌ Excel import error:", error);
+      // console.error("❌ Excel import error:", error);
       if (error instanceof Error) {
         throw new BadRequestException(`Import failed: ${error.message}`);
       }

@@ -10,6 +10,6 @@ export class CustomerStatusScheduler {
   async deactivateExpiredCustomers() {
     // Note: Customer expiry logic has been moved to Recharge model
     // This scheduler is kept for future use or can be removed if not needed
-    console.log("✅ Customer status scheduler running at midnight");
+    // console.log("✅ Customer status scheduler running at midnight");
   }
 }

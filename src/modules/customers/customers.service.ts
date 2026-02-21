@@ -43,14 +43,12 @@ export class CustomersService {
   async findAll() {
     return this.prisma.customer.findMany({
       orderBy: { createdAt: "desc" },
-      include: { issues: true },
     });
   }
 
   async findOne(id: string) {
     const customer = await this.prisma.customer.findUnique({
       where: { id },
-      include: { issues: true },
     });
     if (!customer) throw new NotFoundException(`Customer ${id} not found`);
     return customer;

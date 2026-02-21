@@ -2,9 +2,15 @@ import { IsString, IsOptional, IsDateString } from "class-validator";
 import { ApiProperty } from "@nestjs/swagger";
 
 export class CreateIssueDto {
-  @ApiProperty({ example: "cmhejcoi40000rqqbwcs5i9us" })
+  @ApiProperty({ example: "cluster-123", description: "Cluster ID" })
+  @IsOptional()
   @IsString()
-  customerId!: string;
+  clusterId?: string;
+
+  @ApiProperty({ example: "loadshare-456", description: "LoadShare/Location ID" })
+  @IsOptional()
+  @IsString()
+  loadshareId?: string;
 
   @ApiProperty({ example: "Speed" })
   @IsString()
@@ -19,7 +25,7 @@ export class CreateIssueDto {
   @IsString()
   status?: string;
 
-  @ApiProperty({ example: "Rahul", required: false })
+  @ApiProperty({ example: "op-user-123", required: false, description: "Operator ID to assign to" })
   @IsOptional()
   @IsString()
   assignee?: string;
@@ -29,7 +35,7 @@ export class CreateIssueDto {
   @IsDateString()
   resolvedDate?: string;
 
-  @ApiProperty({ example: "Restarted the router" })
+  @ApiProperty({ example: "Restarted the router", required: false })
   @IsOptional()
   @IsString()
   resolutionNotes?: string;

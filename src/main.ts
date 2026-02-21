@@ -14,10 +14,11 @@ function validateEnv() {
     console.error(
       `❌ Missing required environment variables: ${missing.join(", ")}`
     );
-    process.exit(1);
+    throw new Error(`Missing required environment variables: ${missing.join(", ")}`);
+    // process.exit(1);
   }
 
-  console.log("✅ Environment variables validated");
+   console.log("✅ Environment variables validated");
 }
 
 async function bootstrap() {
