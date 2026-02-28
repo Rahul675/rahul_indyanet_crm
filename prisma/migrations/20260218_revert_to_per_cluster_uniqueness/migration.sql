@@ -1,0 +1,3 @@
+-- Placeholder migration restored locally to match migration history.
+-- The database already has this migration applied.
+-- Intentionally left empty.

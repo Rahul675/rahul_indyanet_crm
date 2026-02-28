@@ -33,9 +33,23 @@ export class RechargesService {
     }
 
     const rechargeDate = new Date(data.rechargeDate);
-    const expiryDate = new Date(
-      rechargeDate.getTime() + data.validityDays * 24 * 60 * 60 * 1000
-    );
+    const currentExpiryDate = loadshare.expiryDate ? new Date(loadshare.expiryDate) : null;
+
+    // Calculate new expiry date based on whether service is still active
+    // If service is active (expiry date is in the future), extend from current expiry
+    // Otherwise, calculate from recharge date
+    let expiryDate: Date;
+    if (currentExpiryDate && currentExpiryDate > rechargeDate) {
+      // Service is still active - add validity days to existing expiry date
+      expiryDate = new Date(
+        currentExpiryDate.getTime() + data.validityDays * 24 * 60 * 60 * 1000
+      );
+    } else {
+      // Service expired or no previous expiry - calculate from recharge date
+      expiryDate = new Date(
+        rechargeDate.getTime() + data.validityDays * 24 * 60 * 60 * 1000
+      );
+    }
 
     const recharge = await this.prisma.recharge.create({
       data: {
@@ -107,9 +121,22 @@ export class RechargesService {
       : existing.rechargeDate;
 
     const validityDays = data.validityDays ?? existing.validityDays;
-    const expiryDate = new Date(
-      rechargeDate.getTime() + validityDays * 24 * 60 * 60 * 1000
-    );
+    
+    // Apply the same smart logic as create method
+    const currentExpiryDate = existing.loadshare?.expiryDate ? new Date(existing.loadshare.expiryDate) : null;
+    
+    let expiryDate: Date;
+    if (currentExpiryDate && currentExpiryDate > rechargeDate) {
+      // Service is still active - add validity days to existing expiry date
+      expiryDate = new Date(
+        currentExpiryDate.getTime() + validityDays * 24 * 60 * 60 * 1000
+      );
+    } else {
+      // Service expired or no previous expiry - calculate from recharge date
+      expiryDate = new Date(
+        rechargeDate.getTime() + validityDays * 24 * 60 * 60 * 1000
+      );
+    }
 
     const updated = await this.prisma.recharge.update({
       where: { id },
@@ -120,7 +147,11 @@ export class RechargesService {
     if (updated.loadshareId) {
       await this.prisma.loadShare.update({
         where: { id: updated.loadshareId },
-        data: { expiryDate },
+        data: { 
+          expiryDate,
+          speed: data.planType || existing.planType,
+          validity: validityDays,
+        },
       });
     }
 

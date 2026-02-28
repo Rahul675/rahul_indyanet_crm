@@ -4,6 +4,7 @@ import { ConfigModule } from "@nestjs/config"; // ✅ Add ConfigModule
 import { PrismaModule } from "./prisma/prisma.module";
 import { PrismaService } from "./prisma/prisma.service";
 import { CustomersModule } from "./modules/customers/customers.module";
+import { VendorsModule } from "./modules/vendors/vendors.module";
 import { IssuesModule } from "./modules/issues/issues.module";
 import { RechargesModule } from "./modules/recharges/recharges.module";
 import { LoadShareModule } from "./modules/loadshare/loadshare.module";
@@ -29,6 +30,7 @@ import { SearchModule } from "./modules/search/search.module";
     ScheduleModule.forRoot(),
     PrismaModule,
     CustomersModule,
+    VendorsModule,
     ClusterModule,
     IssuesModule,
     OtherClientsModule,

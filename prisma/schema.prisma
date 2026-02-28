@@ -26,6 +26,24 @@ model Customer {
   @@map("customers")
 }
 
+model Vendor {
+  id             String   @id @default(cuid())
+  vendorName     String
+  contactNumber  String
+  servicesType   String
+  status         String   @default("Active")
+  onboardDate    DateTime
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  vendorCode     String   @unique
+  additionalInfo Json     @default("{}")
+  paymentMode    String?
+
+  @@index([status])
+  @@index([onboardDate])
+  @@map("vendors")
+}
+
 model Cluster {
   id                String      @id @default(uuid())
   name              String
