@@ -58,6 +58,7 @@ export class RechargesService {
         planType: data.planType,
         rechargeDate,
         amount: data.amount,
+        customerPrice: data.customerPrice,
         validityDays: data.validityDays,
         expiryDate,
         paymentMethod: data.paymentMethod,

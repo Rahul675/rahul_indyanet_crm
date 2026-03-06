@@ -66,6 +66,7 @@ model Issue {
   assignee        String?
   createdDate     DateTime  @default(now())
   resolvedDate    DateTime?
+  resolvedBy      String?
   resolutionNotes String?
   clusterId       String?
   loadshareId     String?
@@ -84,6 +85,7 @@ model Recharge {
   planType      String
   rechargeDate  DateTime
   amount        Float
+  customerPrice Float?
   validityDays  Int
   expiryDate    DateTime
   status        String         @default("Active")

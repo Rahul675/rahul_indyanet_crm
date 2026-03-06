@@ -30,6 +30,11 @@ export class CreateIssueDto {
   @IsString()
   assignee?: string;
 
+  @ApiProperty({ example: "op-resolver-456", required: false, description: "Operator ID who resolved the issue" })
+  @IsOptional()
+  @IsString()
+  resolvedBy?: string;
+
   @ApiProperty({ example: "2025-10-31T00:00:00.000Z", required: false })
   @IsOptional()
   @IsDateString()

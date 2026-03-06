@@ -62,4 +62,39 @@ export class NotificationController {
   async triggerExpiryCheck() {
     return this.notificationService.checkRechargesForExpiry();
   }
+
+  // =====================================================================
+  // 🔧 DEBUG ENDPOINTS - For troubleshooting
+  // =====================================================================
+
+  // 🔍 Get system statistics
+  @Get("debug/stats")
+  async debugGetStats() {
+    return this.notificationService.getDebugStats();
+  }
+
+  // 📜 Get recent notifications
+  @Get("debug/recent")
+  async debugGetRecent(@Query("limit") limit?: string) {
+    const limitNum = parseInt(limit || "20", 10);
+    return this.notificationService.getRecentNotifications(limitNum);
+  }
+
+  // 🧪 Create test notification
+  @Post("debug/test")
+  async debugTestNotification(@Query("userId") userId?: string) {
+    return this.notificationService.testCreateNotification(userId);
+  }
+
+  // 🔍 Verify specific notification
+  @Get("debug/verify/:id")
+  async debugVerify(@Param("id") id: string) {
+    return this.notificationService.verifyPersistence(id);
+  }
+
+  // 🏥 Full health check
+  @Get("debug/health")
+  async debugHealthCheck() {
+    return this.notificationService.healthCheck();
+  }
 }

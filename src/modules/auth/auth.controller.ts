@@ -39,6 +39,12 @@ export class AuthController {
     return this.auth.getAllUsers();
   }
 
+  @Get("profile")
+  @UseGuards(AuthGuard("jwt"))
+  async getProfile(@Req() req: any) {
+    return this.auth.getProfile(req.user.id);
+  }
+
   @Post("change-password")
   @UseGuards(JwtAuthGuard)
   async changePassword(@Req() req: any, @Body() dto: ChangePasswordDto) {

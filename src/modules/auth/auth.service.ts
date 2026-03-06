@@ -75,7 +75,7 @@ export class AuthService {
 
     await this.prisma.user.update({
       where: { id: user.id },
-      data: { isOnline: true, lastLoginAt: new Date() },
+      data: { isOnline: true, lastLoginAt: new Date(), lastActiveAt: new Date() },
     });
 
     const payload = { sub: user.id, email: user.email, role: user.role };
@@ -151,6 +151,7 @@ export class AuthService {
       where: { id: user.id },
       data: {
         isOnline: false,
+        lastActiveAt: new Date(),
         lastLogoutAt: new Date(),
         logoutReason: reason || null,
       },
@@ -184,11 +185,36 @@ export class AuthService {
         email: true,
         role: true,
         isOnline: true,
+        lastActiveAt: true,
         lastLoginAt: true,
         lastLogoutAt: true,
+        createdAt: true,
       },
       orderBy: { createdAt: "desc" },
     });
+  }
+
+  async getProfile(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        isOnline: true,
+        lastActiveAt: true,
+        lastLoginAt: true,
+        lastLogoutAt: true,
+        createdAt: true,
+      },
+    });
+
+    if (!user) {
+      throw new UnauthorizedException("User not found.");
+    }
+
+    return user;
   }
 
   async changePassword(userId: string, dto: ChangePasswordDto) {

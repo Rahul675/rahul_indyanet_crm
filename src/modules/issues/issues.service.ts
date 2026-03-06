@@ -108,9 +108,19 @@ export class IssuesService {
     const existing = await this.prisma.issue.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException(`Issue ${id} not found`);
 
+    // If status is being changed to Resolved, capture the resolver
+    let updateData = { ...data, updatedAt: new Date() };
+    if (data.status === "Resolved" && existing.status !== "Resolved") {
+      updateData = {
+        ...updateData,
+        resolvedBy: user.id,
+        resolvedDate: new Date().toISOString(),
+      };
+    }
+
     const updated = await this.prisma.issue.update({
       where: { id },
-      data: { ...data, updatedAt: new Date() },
+      data: updateData,
       include: { 
         cluster: true,
         loadshare: true
@@ -178,6 +188,7 @@ export class IssuesService {
       select: {
         id: true,
         nameOfLocation: true,
+        rtNumber: true,
         address: true,
         state: true,
         status: true,

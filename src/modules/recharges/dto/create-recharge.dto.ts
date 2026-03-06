@@ -28,6 +28,11 @@ export class CreateRechargeDto {
   @IsNumber()
   amount!: number;
 
+  @ApiProperty({ required: false })
+  @IsNumber()
+  @IsOptional()
+  customerPrice?: number;
+
   @ApiProperty()
   @IsInt()
   validityDays!: number;
