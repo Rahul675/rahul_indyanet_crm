@@ -196,6 +196,87 @@ export class OperatorService {
     private mailer: MailerService
   ) {}
 
+  private async getAssignedClusterIds(operatorId: string) {
+    const clusters = await this.prisma.cluster.findMany({
+      where: { assignedOperators: { has: operatorId } },
+      select: { id: true },
+    });
+
+    return clusters.map((cluster) => cluster.id);
+  }
+
+  private async attachAssignedClusters<T extends { id: string }>(operator: T) {
+    const assignedClusters = await this.getAssignedClusterIds(operator.id);
+    return {
+      ...operator,
+      assignedClusters,
+    };
+  }
+
+  private async syncAssignedClusters(operatorId: string, clusterIds: string[]) {
+    const targetClusterIds = Array.from(new Set(clusterIds || []));
+
+    const existingClusters = await this.prisma.cluster.findMany({
+      where: { assignedOperators: { has: operatorId } },
+      select: { id: true, assignedOperators: true },
+    });
+
+    const existingIds = new Set(existingClusters.map((cluster) => cluster.id));
+    const targetIdSet = new Set(targetClusterIds);
+
+    const requestedClusters = targetClusterIds.length
+      ? await this.prisma.cluster.findMany({
+          where: { id: { in: targetClusterIds } },
+          select: { id: true, assignedOperators: true },
+        })
+      : [];
+
+    if (requestedClusters.length !== targetClusterIds.length) {
+      throw new BadRequestException("One or more selected clusters were not found.");
+    }
+
+    const clusterUpdates = [
+      ...existingClusters
+        .filter((cluster) => !targetIdSet.has(cluster.id))
+        .map((cluster) =>
+          this.prisma.cluster.update({
+            where: { id: cluster.id },
+            data: {
+              assignedOperators: cluster.assignedOperators.filter(
+                (id) => id !== operatorId
+              ),
+            },
+          })
+        ),
+      ...requestedClusters
+        .filter((cluster) => !existingIds.has(cluster.id))
+        .map((cluster) =>
+          this.prisma.cluster.update({
+            where: { id: cluster.id },
+            data: {
+              assignedOperators: Array.from(
+                new Set([...(cluster.assignedOperators || []), operatorId])
+              ),
+            },
+          })
+        ),
+      ...requestedClusters
+        .filter((cluster) => existingIds.has(cluster.id))
+        .map((cluster) =>
+          this.prisma.cluster.update({
+            where: { id: cluster.id },
+            data: {
+              assignedOperators: Array.from(
+                new Set([...(cluster.assignedOperators || []), operatorId])
+              ),
+            },
+          })
+        ),
+    ];
+
+    await this.prisma.$transaction(clusterUpdates);
+  }
+
   // 🟢 Create Operator (Admin Only)
   async create(dto: CreateOperatorDto, currentUser: any) {
     if (currentUser.role !== "admin") {
@@ -226,6 +307,10 @@ export class OperatorService {
         role: "operator",
       },
     });
+
+    if (dto.assignedClusters?.length) {
+      await this.syncAssignedClusters(operator.id, dto.assignedClusters);
+    }
 
     // 🟢 Audit Log
     await this.audit.logAction(
@@ -260,12 +345,12 @@ export class OperatorService {
       success: true,
       data: {
         message: "Operator created successfully",
-        operator: {
+        operator: await this.attachAssignedClusters({
           id: operator.id,
           name: operator.name,
           email: operator.email,
           role: operator.role,
-        },
+        }),
       },
     };
   }
@@ -289,10 +374,14 @@ export class OperatorService {
       orderBy: { createdAt: "desc" },
     });
 
+    const operatorsWithClusters = await Promise.all(
+      operators.map((operator) => this.attachAssignedClusters(operator))
+    );
+
     return {
       success: true,
-      count: operators.length,
-      data: operators,
+      count: operatorsWithClusters.length,
+      data: operatorsWithClusters,
     };
   }
 
@@ -311,7 +400,7 @@ export class OperatorService {
       throw new ForbiddenException("Access denied.");
     }
 
-    return operator;
+    return this.attachAssignedClusters(operator);
   }
 
   // 🟢 Update Operator (Admin Only)
@@ -331,11 +420,15 @@ export class OperatorService {
       },
     });
 
+    if (dto.assignedClusters !== undefined) {
+      await this.syncAssignedClusters(updated.id, dto.assignedClusters);
+    }
+
     return {
       success: true,
       data: {
         message: "Operator updated successfully",
-        operator: updated,
+        operator: await this.attachAssignedClusters(updated),
       },
     };
   }
@@ -353,6 +446,8 @@ export class OperatorService {
     if (!operator || operator.role !== "operator") {
       throw new NotFoundException("Operator not found.");
     }
+
+    await this.syncAssignedClusters(operator.id, []);
 
     await this.prisma.user.delete({ where: { id } });
 

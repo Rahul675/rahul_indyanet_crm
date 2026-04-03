@@ -1,0 +1,70 @@
+import { randomBytes } from "crypto";
+import type { NextFunction, Request, Response } from "express";
+
+export const CSRF_COOKIE_NAME = "csrf_token";
+export const CSRF_HEADER_NAME = "x-csrf-token";
+
+export function parseCookieValue(rawCookie: string | undefined, name: string) {
+  if (!rawCookie) return undefined;
+  const pairs = rawCookie.split(";").map((part) => part.trim());
+  for (const pair of pairs) {
+    const separatorIndex = pair.indexOf("=");
+    if (separatorIndex === -1) continue;
+    const key = pair.slice(0, separatorIndex).trim();
+    if (key !== name) continue;
+    return decodeURIComponent(pair.slice(separatorIndex + 1).trim());
+  }
+  return undefined;
+}
+
+export function isUnsafeMethod(method?: string) {
+  const upper = (method || "").toUpperCase();
+  return upper === "POST" || upper === "PUT" || upper === "PATCH" || upper === "DELETE";
+}
+
+export function shouldEnforceCsrf(req: Request) {
+  if (!isUnsafeMethod(req.method)) return false;
+
+  const rawCookie = req.headers.cookie;
+  const hasAccessCookie = Boolean(parseCookieValue(rawCookie, "access_token"));
+  const hasRefreshCookie = Boolean(parseCookieValue(rawCookie, "refresh_token"));
+
+  // Enforce CSRF only for cookie-authenticated writes.
+  return hasAccessCookie || hasRefreshCookie;
+}
+
+export function setCsrfCookie(res: Response, token: string) {
+  const isProd = process.env.NODE_ENV === "production";
+  res.cookie(CSRF_COOKIE_NAME, token, {
+    httpOnly: false,
+    secure: isProd,
+    sameSite: "lax",
+    path: "/api/v1",
+    maxAge: 30 * 24 * 60 * 60 * 1000,
+  });
+}
+
+export function csrfProtectionMiddleware(req: Request, res: Response, next: NextFunction) {
+  const csrfCookie = parseCookieValue(req.headers.cookie, CSRF_COOKIE_NAME);
+  const csrfToken = csrfCookie || randomBytes(32).toString("hex");
+
+  if (!csrfCookie) {
+    setCsrfCookie(res, csrfToken);
+  }
+
+  if (shouldEnforceCsrf(req)) {
+    const headerValue = req.headers[CSRF_HEADER_NAME] as string | string[] | undefined;
+    const normalizedHeader = Array.isArray(headerValue)
+      ? headerValue[0]
+      : headerValue;
+
+    if (!normalizedHeader || normalizedHeader !== csrfToken) {
+      return res.status(403).json({
+        success: false,
+        message: "Invalid or missing CSRF token.",
+      });
+    }
+  }
+
+  return next();
+}

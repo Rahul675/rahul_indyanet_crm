@@ -1,5 +1,5 @@
 import { ApiProperty } from "@nestjs/swagger";
-import { IsBoolean, IsEmail, IsOptional, IsString } from "class-validator";
+import { IsArray, IsBoolean, IsEmail, IsOptional, IsString } from "class-validator";
 
 export class UpdateOperatorDto {
   @ApiProperty({ required: false })
@@ -16,4 +16,9 @@ export class UpdateOperatorDto {
   @IsOptional()
   @IsBoolean()
   isOnline?: boolean;
+
+  @ApiProperty({ required: false, type: [String] })
+  @IsOptional()
+  @IsArray()
+  assignedClusters?: string[];
 }

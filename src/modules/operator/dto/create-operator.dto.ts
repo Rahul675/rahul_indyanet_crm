@@ -1,5 +1,5 @@
 import { ApiProperty } from "@nestjs/swagger";
-import { IsEmail, IsOptional, IsString, MinLength } from "class-validator";
+import { IsArray, IsEmail, IsOptional, IsString, MinLength } from "class-validator";
 
 export class CreateOperatorDto {
   @ApiProperty()
@@ -15,4 +15,9 @@ export class CreateOperatorDto {
   @IsString()
   @MinLength(6)
   password?: string;
+
+  @ApiProperty({ required: false, type: [String] })
+  @IsOptional()
+  @IsArray()
+  assignedClusters?: string[];
 }
