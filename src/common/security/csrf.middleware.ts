@@ -22,8 +22,24 @@ export function isUnsafeMethod(method?: string) {
   return upper === "POST" || upper === "PUT" || upper === "PATCH" || upper === "DELETE";
 }
 
+function normalizePath(path?: string) {
+  if (!path) return "";
+  return path.split("?")[0] || "";
+}
+
+function isCsrfExemptPath(path?: string) {
+  const normalizedPath = normalizePath(path);
+  return (
+    normalizedPath === "/api/v1/auth/login" ||
+    normalizedPath === "/api/v1/auth/register" ||
+    normalizedPath === "/api/v1/auth/forgot-password" ||
+    normalizedPath === "/api/v1/auth/reset-password"
+  );
+}
+
 export function shouldEnforceCsrf(req: Request) {
   if (!isUnsafeMethod(req.method)) return false;
+  if (isCsrfExemptPath(req.originalUrl || req.url)) return false;
 
   const rawCookie = req.headers.cookie;
   const hasAccessCookie = Boolean(parseCookieValue(rawCookie, "access_token"));

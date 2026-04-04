@@ -114,23 +114,27 @@ async function bootstrap() {
   // ✅ Configure CORS properly
   const app = await NestFactory.create(AppModule, {
     logger: nestLogger,
-    cors: {
-      origin: (origin, callback) => {
-        // Allow non-browser clients and same-origin server-to-server calls.
-        if (!origin) {
-          callback(null, true);
-          return;
-        }
+  });
 
-        if (allowedOrigins.includes(origin)) {
-          callback(null, true);
-          return;
-        }
+  app.enableCors({
+    origin: (
+      origin: string | undefined,
+      callback: (err: Error | null, allow?: boolean) => void
+    ) => {
+      // Allow non-browser clients and same-origin server-to-server calls.
+      if (!origin) {
+        callback(null, true);
+        return;
+      }
 
-        callback(new Error(`CORS blocked for origin: ${origin}`));
-      },
-      credentials: true,
+      if (allowedOrigins.includes(origin)) {
+        callback(null, true);
+        return;
+      }
+
+      callback(new Error(`CORS blocked for origin: ${origin}`));
     },
+    credentials: true,
   });
 
   // ✅ Set global prefix for API versioning
