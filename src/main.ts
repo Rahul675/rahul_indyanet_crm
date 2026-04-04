@@ -1,11 +1,72 @@
 import "reflect-metadata";
 import { NestFactory } from "@nestjs/core";
 import { AppModule } from "./app.module";
-import { ValidationPipe } from "@nestjs/common";
+import { ConsoleLogger, ValidationPipe, type LogLevel } from "@nestjs/common";
 import { TransformInterceptor } from "./common/interceptors/transform.interceptor";
 import { GlobalExceptionFilter } from "./common/filters/global-exception.filter"; // ✅ Import
 import type { NextFunction, Request, Response } from "express";
 import { csrfProtectionMiddleware } from "./common/security/csrf.middleware";
+
+class FilteredNestLogger extends ConsoleLogger {
+  private readonly allowedLogContexts: Set<string>;
+
+  constructor(allowedContexts: string[], logLevels: LogLevel[]) {
+    super("Bootstrap", { logLevels });
+    this.allowedLogContexts = new Set(allowedContexts);
+  }
+
+  override log(message: any, context?: string) {
+    if (!context || this.allowedLogContexts.has(context)) {
+      super.log(message, context);
+    }
+  }
+}
+
+function parseTrustProxy(value: string) {
+  const normalized = value.trim().toLowerCase();
+
+  if (normalized === "true") return true;
+  if (normalized === "false") return false;
+
+  const hopCount = Number(normalized);
+  if (Number.isInteger(hopCount) && hopCount >= 0) {
+    return hopCount;
+  }
+
+  if (
+    normalized === "loopback" ||
+    normalized === "linklocal" ||
+    normalized === "uniquelocal"
+  ) {
+    return normalized;
+  }
+
+  return value;
+}
+
+function parseOrigins(value?: string) {
+  if (!value) return [];
+  return value
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+}
+
+function parseNestLogLevels(value?: string): LogLevel[] {
+  const allowed: LogLevel[] = ["log", "error", "warn", "debug", "verbose", "fatal"];
+  const defaults: LogLevel[] = ["error", "warn", "log"];
+
+  if (!value || !value.trim()) {
+    return defaults;
+  }
+
+  const parsed = value
+    .split(",")
+    .map((item) => item.trim().toLowerCase())
+    .filter((item): item is LogLevel => allowed.includes(item as LogLevel));
+
+  return parsed.length > 0 ? parsed : defaults;
+}
 
 // ✅ Validate required environment variables
 function validateEnv() {
@@ -26,23 +87,61 @@ function validateEnv() {
 async function bootstrap() {
   validateEnv();
 
-  const frontendOrigin = process.env.FRONTEND_URL;
+  const frontendOrigins = parseOrigins(process.env.FRONTEND_URL);
+  const allowLocalDevCors =
+    process.env.ALLOW_LOCALHOST_CORS === "true" ||
+    process.env.NODE_ENV !== "production";
+  const localOrigins = ["http://localhost:5173", "http://localhost:3000"];
+  const allowedOrigins = Array.from(
+    new Set([
+      ...frontendOrigins,
+      ...(allowLocalDevCors ? localOrigins : []),
+    ])
+  );
+
+  const trustProxy =
+    process.env.TRUST_PROXY !== undefined
+      ? parseTrustProxy(process.env.TRUST_PROXY)
+      : process.env.NODE_ENV === "production"
+      ? 1
+      : false;
+  const nestLogLevels = parseNestLogLevels(process.env.NEST_LOG_LEVELS);
+  const nestLogger = new FilteredNestLogger(
+    ["PrismaService", "NestApplication", "MailerService"],
+    nestLogLevels
+  );
 
   // ✅ Configure CORS properly
   const app = await NestFactory.create(AppModule, {
+    logger: nestLogger,
     cors: {
-      origin:
-        process.env.NODE_ENV === "production"
-          ? frontendOrigin
-            ? [frontendOrigin]
-            : []
-          : ["http://localhost:5173", "http://localhost:3000"], // Dev origins
+      origin: (origin, callback) => {
+        // Allow non-browser clients and same-origin server-to-server calls.
+        if (!origin) {
+          callback(null, true);
+          return;
+        }
+
+        if (allowedOrigins.includes(origin)) {
+          callback(null, true);
+          return;
+        }
+
+        callback(new Error(`CORS blocked for origin: ${origin}`));
+      },
       credentials: true,
     },
   });
 
   // ✅ Set global prefix for API versioning
   app.setGlobalPrefix("api/v1");
+  app.getHttpAdapter().getInstance().set("trust proxy", trustProxy);
+
+  console.log(`🔐 Trust proxy: ${JSON.stringify(trustProxy)}`);
+  console.log(`🪵 Nest log levels: ${nestLogLevels.join(", ")}`);
+  console.log(
+    `🌐 CORS allowed origins: ${allowedOrigins.length ? allowedOrigins.join(", ") : "(none)"}`
+  );
 
   app.use((req: Request, res: Response, next: NextFunction) => {
     res.setHeader("X-Content-Type-Options", "nosniff");

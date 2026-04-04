@@ -2,7 +2,6 @@ import { Module } from "@nestjs/common";
 import { ScheduleModule } from "@nestjs/schedule";
 import { ConfigModule } from "@nestjs/config"; // ✅ Add ConfigModule
 import { PrismaModule } from "./prisma/prisma.module";
-import { PrismaService } from "./prisma/prisma.service";
 import { CustomersModule } from "./modules/customers/customers.module";
 import { VendorsModule } from "./modules/vendors/vendors.module";
 import { IssuesModule } from "./modules/issues/issues.module";
@@ -47,7 +46,6 @@ import { SearchModule } from "./modules/search/search.module";
   ],
 
   providers: [
-    PrismaService,
     CustomerStatusScheduler, // ✅ Scheduler stays registered
   ],
 })

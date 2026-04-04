@@ -108,11 +108,8 @@ export class AuthController {
   }
 
   private getClientIp(req: any) {
-    const forwarded = req?.headers?.["x-forwarded-for"];
-    if (typeof forwarded === "string" && forwarded.length > 0) {
-      return forwarded.split(",")[0]?.trim();
-    }
-    return req?.ip || req?.socket?.remoteAddress || "unknown";
+    const firstTrustedIp = Array.isArray(req?.ips) && req.ips.length > 0 ? req.ips[0] : undefined;
+    return firstTrustedIp || req?.ip || req?.socket?.remoteAddress || "unknown";
   }
 
   @Post("register")

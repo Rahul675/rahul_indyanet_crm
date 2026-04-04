@@ -4,9 +4,7 @@ import {
   OnModuleDestroy,
   Logger,
 } from "@nestjs/common";
-import { PrismaClient, Prisma } from "@prisma/client";
-import * as dotenv from "dotenv";
-import * as path from "path";
+import { PrismaClient } from "@prisma/client";
 
 @Injectable()
 export class PrismaService
@@ -16,9 +14,6 @@ export class PrismaService
   private readonly logger = new Logger(PrismaService.name);
 
   constructor() {
-    // ✅ Force load .env from root (important when running from dist/)
-    dotenv.config({ path: path.resolve(process.cwd(), ".env") });
-
     const dbUrl = process.env.DATABASE_URL;
 
     if (!dbUrl) {
