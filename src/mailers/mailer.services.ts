@@ -1,203 +1,199 @@
-// import { Injectable } from "@nestjs/common";
-// import * as nodemailer from "nodemailer";
-
-// @Injectable()
-// export class MailerService {
-//   private transporter = nodemailer.createTransport({
-//     host: process.env.SMTP_HOST,
-//     port: Number(process.env.SMTP_PORT) || 587,
-//     secure: false,
-//     auth: {
-//       user: process.env.SMTP_USER,
-//       pass: process.env.SMTP_PASS,
-//     },
-//   });
-
-//   async send(to: string, subject: string, html: string) {
-//     return this.transporter.sendMail({
-//       from: "Indyanet HRM <hrmindiyanet@gmail.com>",
-//       to,
-//       subject,
-//       html,
-//     });
-//   }
-// }
-
 import { Injectable, Logger, OnModuleInit } from "@nestjs/common";
-import { lookup } from "node:dns/promises";
-import { isIP } from "node:net";
-import * as nodemailer from "nodemailer";
-
-const TRANSIENT_SMTP_ERROR_CODES = new Set([
-  "ETIMEOUT",
-  "EDNS",
-  "EAI_AGAIN",
-  "ENOTFOUND",
+ 
+const TRANSIENT_HTTP_STATUS = new Set([408, 425, 429, 500, 502, 503, 504]);
+const TRANSIENT_ERROR_CODES = new Set([
+  "ETIMEDOUT",
   "ECONNRESET",
+  "ENOTFOUND",
+  "EAI_AGAIN",
   "ECONNREFUSED",
+  "UND_ERR_CONNECT_TIMEOUT",
+  "UND_ERR_HEADERS_TIMEOUT",
 ]);
+
+type MailHealthStatus = "ok" | "error" | "not_configured" | "unknown";
+
+type MailHealthVerification = {
+  status: MailHealthStatus;
+  checkedAt: string | null;
+  message: string | null;
+  code: string | null;
+};
 
 @Injectable()
 export class MailerService implements OnModuleInit {
   private readonly logger = new Logger(MailerService.name);
-  private transporter: nodemailer.Transporter | null = null;
-  private smtpHost = "";
-  private smtpConnectHost = "";
-  private smtpPort = 587;
-  private smtpFrom = "";
+  private apiBaseUrl = "https://api.brevo.com/v3";
+  private apiKey = "";
+  private fromEmail = "";
+  private fromName = "Indyanet CRM";
+  private timeoutMs = 10000;
+  private maxRetries = 2;
   private configured = false;
-  private lastVerification: {
-    status: "ok" | "error" | "not_configured" | "unknown";
-    checkedAt: string | null;
-    message: string | null;
-    code: string | null;
-  } = {
+  private lastVerification: MailHealthVerification = {
     status: "unknown",
     checkedAt: null,
     message: null,
     code: null,
   };
 
-  private isTransientSmtpError(error: unknown) {
+  private isTransientError(error: unknown) {
     const code = (error as any)?.code;
-    return typeof code === "string" && TRANSIENT_SMTP_ERROR_CODES.has(code);
+    const status = (error as any)?.status;
+    return (
+      (typeof code === "string" && TRANSIENT_ERROR_CODES.has(code)) ||
+      (typeof status === "number" && TRANSIENT_HTTP_STATUS.has(status))
+    );
   }
 
   private async sleep(ms: number) {
     await new Promise((resolve) => setTimeout(resolve, ms));
   }
 
-  private async resolveSmtpConnectHost(host: string): Promise<string> {
-    if (isIP(host)) {
-      return host;
-    }
+  private createTimeoutSignal(timeoutMs: number) {
+    const controller = new AbortController();
+    const timeoutRef = setTimeout(() => controller.abort(), timeoutMs);
+    return { signal: controller.signal, timeoutRef };
+  }
 
-    const preferredFamily = Number(process.env.SMTP_LOOKUP_FAMILY) || 4;
+  private buildHeaders() {
+    return {
+      "api-key": this.apiKey,
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    };
+  }
+
+  private parseHttpErrorBody(data: any) {
+    if (!data) return "Unknown API error";
+    if (typeof data === "string") return data;
+    if (Array.isArray(data?.message)) return data.message.join(", ");
+    if (typeof data?.message === "string") return data.message;
+    if (typeof data?.code === "string") return data.code;
     try {
-      const resolved = await lookup(host, { family: preferredFamily as 4 | 6 });
-      return resolved.address;
+      return JSON.stringify(data);
+    } catch {
+      return "Unknown API error";
+    }
+  }
+
+  private async brevoRequest(path: string, init: RequestInit) {
+    const { signal, timeoutRef } = this.createTimeoutSignal(this.timeoutMs);
+
+    try {
+      const response = await fetch(`${this.apiBaseUrl}${path}`, {
+        ...init,
+        signal,
+      });
+
+      const raw = await response.text();
+      let data: any = null;
+      if (raw) {
+        try {
+          data = JSON.parse(raw);
+        } catch {
+          data = raw;
+        }
+      }
+
+      if (!response.ok) {
+        const err: any = new Error(this.parseHttpErrorBody(data));
+        err.status = response.status;
+        err.response = data;
+        throw err;
+      }
+
+      return data;
+    } catch (error: any) {
+      if (error?.name === "AbortError") {
+        const timeoutError: any = new Error(
+          `Brevo API request timed out after ${this.timeoutMs}ms`
+        );
+        timeoutError.code = "ETIMEDOUT";
+        throw timeoutError;
+      }
+      throw error;
+    } finally {
+      clearTimeout(timeoutRef);
+    }
+  }
+
+  private async verifyApi() {
+    try {
+      await this.brevoRequest("/account", {
+        method: "GET",
+        headers: this.buildHeaders(),
+      });
+
+      this.lastVerification = {
+        status: "ok",
+        checkedAt: new Date().toISOString(),
+        message: "Brevo API key verified",
+        code: null,
+      };
+      return;
     } catch (error) {
-      this.logger.warn(
-        `SMTP host lookup via OS resolver failed for ${host}: ${(error as any)?.message || error}. Falling back to hostname.`
-      );
-      return host;
+      this.lastVerification = {
+        status: "error",
+        checkedAt: new Date().toISOString(),
+        message: (error as any)?.message || "Brevo verification failed",
+        code:
+          String((error as any)?.status || "") ||
+          String((error as any)?.code || "") ||
+          null,
+      };
+
+      if (this.isTransientError(error)) {
+        this.logger.warn(
+          `Brevo verification transient error (${(error as any)?.status || (error as any)?.code}). Mailer will retry on send.`
+        );
+      } else {
+        this.logger.error("Brevo API verification failed", error as any);
+      }
     }
   }
 
   async onModuleInit() {
-    const host = process.env.SMTP_HOST;
-    const port = Number(process.env.SMTP_PORT) || 587;
-    const user = process.env.SMTP_USER;
-    const pass = process.env.SMTP_PASS;
-    const from = process.env.EMAIL_FROM || user;
+    this.apiBaseUrl = process.env.BREVO_API_BASE_URL || "https://api.brevo.com/v3";
+    this.apiKey = process.env.BREVO_API_KEY || "";
+    this.fromEmail = process.env.EMAIL_FROM || process.env.BREVO_SENDER_EMAIL || "";
+    this.fromName = process.env.BREVO_SENDER_NAME || "Indyanet CRM";
+    this.timeoutMs = Number(process.env.BREVO_HTTP_TIMEOUT_MS) || 10000;
+    this.maxRetries = Number(process.env.BREVO_MAX_RETRIES) || 2;
 
-    this.smtpHost = host || "";
-    this.smtpPort = port;
-    this.smtpFrom = from || "";
-    this.configured = Boolean(host && user && pass);
+    this.configured = Boolean(this.apiKey && this.fromEmail);
 
-    if (!host || !user || !pass) {
+    if (!this.configured) {
       this.lastVerification = {
         status: "not_configured",
         checkedAt: new Date().toISOString(),
-        message:
-          "SMTP not configured (missing SMTP_HOST / SMTP_USER / SMTP_PASS). Mailer disabled.",
+        message: "Brevo mailer not configured (missing BREVO_API_KEY or EMAIL_FROM).",
         code: null,
       };
       this.logger.warn(
-        "SMTP not configured (missing SMTP_HOST / SMTP_USER / SMTP_PASS). Mailer disabled."
+        "Brevo mailer not configured (missing BREVO_API_KEY or EMAIL_FROM). Mailer disabled."
       );
       return;
     }
 
-    const connectHost = await this.resolveSmtpConnectHost(host);
-    const useTlsServerName = connectHost !== host && !isIP(host);
-    this.smtpConnectHost = connectHost;
-
-    this.transporter = nodemailer.createTransport({
-      host: connectHost,
-      port,
-      secure: port === 465, // true for 465, false for 587 (STARTTLS)
-      connectionTimeout: Number(process.env.SMTP_CONNECTION_TIMEOUT_MS) || 10000,
-      greetingTimeout: Number(process.env.SMTP_GREETING_TIMEOUT_MS) || 10000,
-      socketTimeout: Number(process.env.SMTP_SOCKET_TIMEOUT_MS) || 20000,
-      dnsTimeout: Number(process.env.SMTP_DNS_TIMEOUT_MS) || 10000,
-      auth: {
-        user,
-        pass,
-      },
-      logger: false,
-      debug: false,
-      tls: {
-        servername: useTlsServerName ? host : undefined,
-        // If you encounter certificate issues while debugging, set to false temporarily.
-        rejectUnauthorized: true,
-      },
-    });
-
-    try {
-      await this.transporter.verify();
-      this.lastVerification = {
-        status: "ok",
-        checkedAt: new Date().toISOString(),
-        message: "SMTP transporter verified",
-        code: null,
-      };
-      this.logger.log(
-        `SMTP transporter verified (host=${host} connectHost=${connectHost} port=${port} from=${from})`
-      );
-    } catch (err) {
-      this.lastVerification = {
-        status: "error",
-        checkedAt: new Date().toISOString(),
-        message: (err as any)?.message || "SMTP verification failed",
-        code: (err as any)?.code || null,
-      };
-      if (this.isTransientSmtpError(err)) {
-        this.logger.warn(
-          `SMTP verification timeout/network issue (${(err as any)?.code}). Mailer will keep retrying on send.`
-        );
-      } else {
-        this.logger.error("SMTP verification failed", err as any);
-      }
-    }
+    await this.verifyApi();
   }
 
   async getHealth(options?: { live?: boolean }) {
-    if (options?.live && this.transporter) {
-      try {
-        await this.transporter.verify();
-        this.lastVerification = {
-          status: "ok",
-          checkedAt: new Date().toISOString(),
-          message: "SMTP transporter verified",
-          code: null,
-        };
-      } catch (error) {
-        this.lastVerification = {
-          status: "error",
-          checkedAt: new Date().toISOString(),
-          message: (error as any)?.message || "SMTP verification failed",
-          code: (error as any)?.code || null,
-        };
-      }
+    if (options?.live && this.configured) {
+      await this.verifyApi();
     }
 
     return {
       success: true,
+      provider: "brevo-http-api",
       configured: this.configured,
-      transporterReady: Boolean(this.transporter),
-      host: this.smtpHost || null,
-      connectHost: this.smtpConnectHost || this.smtpHost || null,
-      port: this.smtpPort,
-      from: this.smtpFrom || null,
+      apiBaseUrl: this.apiBaseUrl,
+      from: this.fromEmail || null,
+      senderName: this.fromName,
       verification: this.lastVerification,
-      timeouts: {
-        connectionTimeoutMs: Number(process.env.SMTP_CONNECTION_TIMEOUT_MS) || 10000,
-        greetingTimeoutMs: Number(process.env.SMTP_GREETING_TIMEOUT_MS) || 10000,
-        socketTimeoutMs: Number(process.env.SMTP_SOCKET_TIMEOUT_MS) || 20000,
-        dnsTimeoutMs: Number(process.env.SMTP_DNS_TIMEOUT_MS) || 10000,
-      },
+      httpTimeoutMs: this.timeoutMs,
+      maxRetries: this.maxRetries,
     };
   }
 
@@ -210,53 +206,60 @@ export class MailerService implements OnModuleInit {
     html: string,
     opts?: { from?: string; text?: string }
   ): Promise<{ success: boolean; info?: any; error?: any }> {
-    if (!this.transporter) {
+    if (!this.configured) {
       const errMsg =
-        "Mailer transporter not initialized; check SMTP env vars (SMTP_HOST/SMTP_USER/SMTP_PASS).";
+        "Brevo mailer not configured; check BREVO_API_KEY and EMAIL_FROM/BREVO_SENDER_EMAIL.";
       this.logger.error(errMsg);
       return { success: false, error: errMsg };
     }
 
-    const from = opts?.from || process.env.EMAIL_FROM || process.env.SMTP_USER;
-    try {
-      const info = await this.transporter.sendMail({
-        from,
-        to,
-        subject,
-        text: opts?.text || undefined,
-        html,
-      });
-      this.logger.log(`Email sent to ${to} messageId=${info?.messageId}`);
-      return { success: true, info };
-    } catch (error) {
-      if (this.isTransientSmtpError(error)) {
-        this.logger.warn(
-          `Transient SMTP error (${(error as any)?.code}) while sending to ${to}. Retrying once...`
-        );
-        await this.sleep(1000);
+    const fromAddress = opts?.from || this.fromEmail;
+    const payload = {
+      sender: {
+        email: fromAddress,
+        name: this.fromName,
+      },
+      to: [{ email: to }],
+      subject,
+      htmlContent: html,
+      textContent: opts?.text || undefined,
+    };
 
-        try {
-          const info = await this.transporter.sendMail({
-            from,
-            to,
-            subject,
-            text: opts?.text || undefined,
-            html,
-          });
-          this.logger.log(`Email sent to ${to} messageId=${info?.messageId}`);
-          return { success: true, info };
-        } catch (retryError) {
-          this.logger.error(
-            `Failed to send email to ${to} after retry: ${(retryError as any)?.message || retryError}`
+    let attempt = 0;
+    const totalAttempts = this.maxRetries + 1;
+
+    while (attempt < totalAttempts) {
+      try {
+        const info = await this.brevoRequest("/smtp/email", {
+          method: "POST",
+          headers: this.buildHeaders(),
+          body: JSON.stringify(payload),
+        });
+
+        this.logger.log(`Email sent to ${to} via Brevo messageId=${info?.messageId}`);
+        return { success: true, info };
+      } catch (error) {
+        attempt += 1;
+        const retryable = this.isTransientError(error);
+
+        if (attempt < totalAttempts && retryable) {
+          const backoffMs = 500 * Math.pow(2, attempt - 1);
+          this.logger.warn(
+            `Transient Brevo error on attempt ${attempt}/${totalAttempts} for ${to} (${(error as any)?.status || (error as any)?.code || "UNKNOWN"}). Retrying in ${backoffMs}ms.`
           );
-          return { success: false, error: retryError };
+          await this.sleep(backoffMs);
+          continue;
         }
-      }
 
-      this.logger.error(
-        `Failed to send email to ${to}: ${(error as any)?.message || error}`
-      );
-      return { success: false, error };
+        this.logger.error(
+          `Failed to send email to ${to} via Brevo after ${attempt} attempt(s): ${(error as any)?.message || error}`
+        );
+        return { success: false, error };
+      }
     }
+
+    const exhaustedError = "Failed to send email after retry attempts.";
+    this.logger.error(exhaustedError);
+    return { success: false, error: exhaustedError };
   }
 }
