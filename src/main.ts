@@ -116,6 +116,11 @@ async function bootstrap() {
     logger: nestLogger,
   });
 
+  // Browsers often auto-request /favicon.ico; return empty response to avoid noisy 404 logs.
+  app.use("/favicon.ico", (_req: Request, res: Response) => {
+    res.status(204).end();
+  });
+
   app.enableCors({
     origin: (
       origin: string | undefined,

@@ -17,6 +17,22 @@ export function parseCookieValue(rawCookie: string | undefined, name: string) {
   return undefined;
 }
 
+function parseCookieValues(rawCookie: string | undefined, name: string) {
+  if (!rawCookie) return [] as string[];
+
+  const pairs = rawCookie.split(";").map((part) => part.trim());
+  const values: string[] = [];
+  for (const pair of pairs) {
+    const separatorIndex = pair.indexOf("=");
+    if (separatorIndex === -1) continue;
+    const key = pair.slice(0, separatorIndex).trim();
+    if (key !== name) continue;
+    values.push(decodeURIComponent(pair.slice(separatorIndex + 1).trim()));
+  }
+
+  return values;
+}
+
 export function isUnsafeMethod(method?: string) {
   const upper = (method || "").toUpperCase();
   return upper === "POST" || upper === "PUT" || upper === "PATCH" || upper === "DELETE";
@@ -61,10 +77,11 @@ export function setCsrfCookie(res: Response, token: string) {
 }
 
 export function csrfProtectionMiddleware(req: Request, res: Response, next: NextFunction) {
-  const csrfCookie = parseCookieValue(req.headers.cookie, CSRF_COOKIE_NAME);
-  const csrfToken = csrfCookie || randomBytes(32).toString("hex");
+  const csrfCookieValues = parseCookieValues(req.headers.cookie, CSRF_COOKIE_NAME);
+  const csrfToken =
+    csrfCookieValues[csrfCookieValues.length - 1] || randomBytes(32).toString("hex");
 
-  if (!csrfCookie) {
+  if (csrfCookieValues.length === 0) {
     setCsrfCookie(res, csrfToken);
   }
 
@@ -74,7 +91,11 @@ export function csrfProtectionMiddleware(req: Request, res: Response, next: Next
       ? headerValue[0]
       : headerValue;
 
-    if (!normalizedHeader || normalizedHeader !== csrfToken) {
+    const isHeaderValid =
+      typeof normalizedHeader === "string" &&
+      csrfCookieValues.includes(normalizedHeader);
+
+    if (!isHeaderValid) {
       return res.status(403).json({
         success: false,
         message: "Invalid or missing CSRF token.",
