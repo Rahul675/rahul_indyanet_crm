@@ -55,7 +55,7 @@ export function setCsrfCookie(res: Response, token: string) {
     httpOnly: false,
     secure: isProd,
     sameSite: "lax",
-    path: "/api/v1",
+    path: "/",
     maxAge: 30 * 24 * 60 * 60 * 1000,
   });
 }

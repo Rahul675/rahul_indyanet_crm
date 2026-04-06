@@ -65,7 +65,7 @@ export class AuthController {
       httpOnly: false,
       secure: isProd,
       sameSite: "lax",
-      path: "/api/v1",
+      path: "/",
       maxAge: 30 * 24 * 60 * 60 * 1000,
     });
   }
@@ -85,7 +85,7 @@ export class AuthController {
       httpOnly: false,
       secure: isProd,
       sameSite: "lax",
-      path: "/api/v1",
+      path: "/",
     });
   }
 
@@ -97,7 +97,7 @@ export class AuthController {
       httpOnly: false,
       secure: isProd,
       sameSite: "lax",
-      path: "/api/v1",
+      path: "/",
       maxAge: 30 * 24 * 60 * 60 * 1000,
     });
 
