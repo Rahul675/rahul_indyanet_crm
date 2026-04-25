@@ -67,10 +67,18 @@ export function shouldEnforceCsrf(req: Request) {
 
 export function setCsrfCookie(res: Response, token: string) {
   const isProd = process.env.NODE_ENV === "production";
+  const rawSameSite = (process.env.AUTH_COOKIE_SAME_SITE || "lax").trim().toLowerCase();
+  const configuredSameSite: "strict" | "lax" | "none" =
+    rawSameSite === "strict" || rawSameSite === "none" || rawSameSite === "lax"
+      ? rawSameSite
+      : "lax";
+  const secure = isProd;
+  const sameSite = configuredSameSite === "none" && !secure ? "lax" : configuredSameSite;
+
   res.cookie(CSRF_COOKIE_NAME, token, {
     httpOnly: false,
-    secure: isProd,
-    sameSite: "lax",
+    secure,
+    sameSite,
     path: "/",
     maxAge: 30 * 24 * 60 * 60 * 1000,
   });

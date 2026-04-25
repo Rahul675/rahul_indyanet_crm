@@ -327,7 +327,6 @@ export class AuthService {
     });
 
     if (!existingSession) {
-      await this.revokeAllRefreshSessions(user.id);
       throw new UnauthorizedException("Invalid refresh token.");
     }
 
@@ -349,9 +348,40 @@ export class AuthService {
 
     return {
       success: true,
+      message: "Token refreshed successfully",
       token: newAccessToken,
       refreshToken: newRefreshToken,
     };
+  }
+
+  async logoutByRefreshToken(refreshToken?: string, reason?: string) {
+    if (!refreshToken) {
+      return {
+        success: true,
+        message: "Logout successful",
+      };
+    }
+
+    let payload: any;
+    try {
+      payload = this.jwtService.verify(refreshToken, {
+        secret: this.getRefreshSecret(),
+      });
+    } catch {
+      return {
+        success: true,
+        message: "Logout successful",
+      };
+    }
+
+    if (payload?.type !== "refresh" || !payload?.sub) {
+      return {
+        success: true,
+        message: "Logout successful",
+      };
+    }
+
+    return this.logout(payload.sub, reason);
   }
 
   async logout(userId: string, reason?: string) {

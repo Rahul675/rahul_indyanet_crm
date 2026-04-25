@@ -2,6 +2,7 @@ import "reflect-metadata";
 import { NestFactory } from "@nestjs/core";
 import { AppModule } from "./app.module";
 import { ConsoleLogger, ValidationPipe, type LogLevel } from "@nestjs/common";
+import cookieParser from "cookie-parser";
 import { TransformInterceptor } from "./common/interceptors/transform.interceptor";
 import { GlobalExceptionFilter } from "./common/filters/global-exception.filter"; // ✅ Import
 import type { NextFunction, Request, Response } from "express";
@@ -141,6 +142,8 @@ async function bootstrap() {
     },
     credentials: true,
   });
+
+  app.use(cookieParser());
 
   // ✅ Set global prefix for API versioning
   app.setGlobalPrefix("api/v1");
